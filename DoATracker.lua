@@ -32,6 +32,9 @@ DAT.DEFAULTS = {
     timerOffsetX     = 0,
     timerOffsetY     = 0,
     timerShowSuffix  = true,
+    demonFontSize    = 13,
+    demonOffsetX     = 0,
+    demonOffsetY     = 0,
     borderName       = "None",
     borderPath       = nil,
     borderSize       = 12,
@@ -40,6 +43,8 @@ DAT.DEFAULTS = {
     activeCountColor = { r = 0.15, g = 1.0,  b = 0.15 },
     inactCountColor  = { r = 0.55, g = 0.55, b = 0.55 },
     timerColor       = { r = 1.0,  g = 0.82, b = 0.0  },
+    activeDemonColor = { r = 1.0,  g = 0.84, b = 0.0  },
+    inactDemonColor  = { r = 0.55, g = 0.55, b = 0.55 },
     iconBrightness   = 35,
     overlayAlpha     = 45,
     glowEnabled      = false,
@@ -78,6 +83,7 @@ local darkOverlay = nil
 local borderFrame = nil
 local countText   = nil
 local timerText   = nil
+local demonText   = nil
 
 ------------------------------------------------------------
 -- LibCustomGlow
@@ -113,6 +119,8 @@ function DAT:Initialize()
     Migrate("activeCountR",  "activeCountG",  "activeCountB",  "activeCountColor")
     Migrate("inactCountR",   "inactCountG",   "inactCountB",   "inactCountColor")
     Migrate("timerR",        "timerG",        "timerB",        "timerColor")
+    Migrate("activeDemonR",  "activeDemonG",  "activeDemonB",  "activeDemonColor")
+    Migrate("inactDemonR",   "inactDemonG",   "inactDemonB",   "inactDemonColor")
 
     -- Merge defaults
     for k, v in pairs(self.DEFAULTS) do
@@ -178,6 +186,13 @@ function DAT:CreateUI()
     borderFrame:SetPoint("TOP", frame, "TOP", 0, 0)
     borderFrame:SetFrameLevel(frame:GetFrameLevel() + 5)
 
+    -- Demon count text (top of icon)
+    demonText = frame:CreateFontString(nil, "OVERLAY")
+    demonText:SetPoint("TOP", frame, "TOP", db.demonOffsetX, db.demonOffsetY)
+    DAT.Media:SetFont(demonText, db.demonFontSize)
+    demonText:SetText("0")
+    demonText:Hide()
+
     -- Count text
     countText = frame:CreateFontString(nil, "OVERLAY")
     countText:SetPoint("CENTER", frame, "TOP", db.countOffsetX, -(sz / 2) + db.countOffsetY)
@@ -221,6 +236,10 @@ function DAT:RebuildUI()
     borderFrame:SetSize(sz, sz)
     borderFrame:ClearAllPoints()
     borderFrame:SetPoint("TOP", frame, "TOP", 0, 0)
+
+    demonText:ClearAllPoints()
+    demonText:SetPoint("TOP", frame, "TOP", db.demonOffsetX, db.demonOffsetY)
+    DAT.Media:SetFont(demonText, db.demonFontSize)
 
     countText:ClearAllPoints()
     countText:SetPoint("CENTER", frame, "TOP", db.countOffsetX, -(sz / 2) + db.countOffsetY)
@@ -271,6 +290,8 @@ function DAT:ApplyVisuals()
         iconTex:SetVertexColor(1, 1, 1, 1)
         local c = db.activeCountColor
         countText:SetTextColor(c.r, c.g, c.b)
+        local dc = db.activeDemonColor
+        if demonText then demonText:SetTextColor(dc.r, dc.g, dc.b) end
         if borderFrame and db.borderPath then
             local bc = db.borderColor
             borderFrame:SetBackdropBorderColor(bc.r, bc.g, bc.b, 1)
@@ -279,6 +300,8 @@ function DAT:ApplyVisuals()
         iconTex:SetVertexColor(br, br, br, 1)
         local c = db.inactCountColor
         countText:SetTextColor(c.r, c.g, c.b)
+        local dc = db.inactDemonColor
+        if demonText then demonText:SetTextColor(dc.r, dc.g, dc.b) end
         if borderFrame and db.borderPath then
             local bc = db.inactBorderColor
             borderFrame:SetBackdropBorderColor(bc.r, bc.g, bc.b, 1)
@@ -319,9 +342,14 @@ function DAT:ApplyShadow()
         countText:SetShadowColor(c.r, c.g, c.b, 1)
         timerText:SetShadowOffset(ox, oy)
         timerText:SetShadowColor(c.r, c.g, c.b, 1)
+        if demonText then
+            demonText:SetShadowOffset(ox, oy)
+            demonText:SetShadowColor(c.r, c.g, c.b, 1)
+        end
     else
         countText:SetShadowOffset(0, 0)
         timerText:SetShadowOffset(0, 0)
+        if demonText then demonText:SetShadowOffset(0, 0) end
     end
 end
 
@@ -406,6 +434,7 @@ local function OnDominionEnd()
             lingerTimer = nil
             hogCount = 0
             if countText then countText:SetText("0") end
+            if demonText then demonText:SetText("0"); demonText:Hide() end
             DAT:ApplyVisuals()
         end)
     end
@@ -422,6 +451,7 @@ local function OnDominionStart()
     dominionTimer         = C_Timer.NewTimer(DOMINION_DURATION, OnDominionEnd)
     updateTicker          = C_Timer.NewTicker(0.1, UpdateCountdown)
     if countText then countText:SetText("0") end
+    if demonText then demonText:SetText("0"); demonText:Hide() end
     if timerText then timerText:Show() end
     local msg = DAT.db.startMsg or "Dominion of Argus active!"
     print("|cffaa44ff[DoA Tracker]|r " .. msg)
@@ -440,6 +470,13 @@ castFrame:SetScript("OnEvent", function(_, _, _, _, spellID)
     elseif spellID == HOG_ID and dominionActive then
         hogCount = hogCount + 1
         if countText then countText:SetText(hogCount) end
+        if demonText then
+            local dc = math.floor(hogCount / 2)
+            if dc > 0 then
+                demonText:SetText(dc)
+                demonText:Show()
+            end
+        end
     end
 end)
 
@@ -485,6 +522,7 @@ SlashCmdList["DOATRACKER"] = function(msg)
         DAT._dominionActive = false
         hogCount            = 0
         if countText then countText:SetText("0") end
+        if demonText then demonText:SetText("0"); demonText:Hide() end
         if timerText then timerText:Hide(); timerText:SetText("") end
         DAT:ApplyVisuals()
         DAT:ApplyGlow(false)

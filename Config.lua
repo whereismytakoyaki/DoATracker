@@ -287,6 +287,27 @@ local function BuildPageFonts(cat)
         function() return DAT.db.countOffsetY or 0 end,
         function(v) DAT.db.countOffsetY = v; DAT:RebuildUI() end)
 
+    -- Demon count text
+    SectionHeader(cat, "Demon Count Text")
+
+    MakeSlider(cat, "DAT_demonFontSize", "Font Size", 13,
+        6, 24, 1,
+        function(v) return tostring(v) end,
+        function() return DAT.db.demonFontSize or 13 end,
+        function(v) DAT.db.demonFontSize = v; DAT:RebuildUI() end)
+
+    MakeSlider(cat, "DAT_demonOffsetX", "Offset X", 0,
+        -100, 100, 1,
+        function(v) return tostring(v) end,
+        function() return DAT.db.demonOffsetX or 0 end,
+        function(v) DAT.db.demonOffsetX = v; DAT:RebuildUI() end)
+
+    MakeSlider(cat, "DAT_demonOffsetY", "Offset Y", 0,
+        -100, 100, 1,
+        function(v) return tostring(v) end,
+        function() return DAT.db.demonOffsetY or 0 end,
+        function(v) DAT.db.demonOffsetY = v; DAT:RebuildUI() end)
+
     -- Timer text
     SectionHeader(cat, "Timer Text")
 
@@ -379,6 +400,22 @@ local function BuildPageColors(cat)
         function() return DAT.db.inactCountColor or { r=0.55, g=0.55, b=0.55 } end,
         function(r, g, b)
             DAT.db.inactCountColor = { r=r, g=g, b=b }
+            DAT:ApplyVisuals()
+        end)
+
+    SectionHeader(cat, "Active Demon Count Color")
+    MakeColorPicker(cat, "Active Demon Count",
+        function() return DAT.db.activeDemonColor or { r=1.0, g=0.84, b=0.0 } end,
+        function(r, g, b)
+            DAT.db.activeDemonColor = { r=r, g=g, b=b }
+            DAT:ApplyVisuals()
+        end)
+
+    SectionHeader(cat, "Inactive Demon Count Color")
+    MakeColorPicker(cat, "Inactive Demon Count",
+        function() return DAT.db.inactDemonColor or { r=0.55, g=0.55, b=0.55 } end,
+        function(r, g, b)
+            DAT.db.inactDemonColor = { r=r, g=g, b=b }
             DAT:ApplyVisuals()
         end)
 
