@@ -28,13 +28,16 @@ DAT.DEFAULTS = {
     countFontSize    = 28,
     countOffsetX     = 0,
     countOffsetY     = 0,
+    countAnchor      = "CENTER",
     timerFontSize    = 13,
     timerOffsetX     = 0,
     timerOffsetY     = 0,
+    timerAnchor      = "BOTTOM",
     timerShowSuffix  = true,
     demonFontSize    = 13,
     demonOffsetX     = 0,
     demonOffsetY     = 0,
+    demonAnchor      = "TOP",
     borderName       = "None",
     borderPath       = nil,
     borderSize       = 12,
@@ -84,6 +87,25 @@ local borderFrame = nil
 local countText   = nil
 local timerText   = nil
 local demonText   = nil
+
+------------------------------------------------------------
+-- Text anchor helper
+-- Positions a text object by centering it on the chosen
+-- edge of the icon (TOP / BOTTOM / LEFT / RIGHT / CENTER).
+-- offsetX/Y are then symmetric around that anchor point.
+------------------------------------------------------------
+local function ApplyTextPoint(textObj, anchor, offsetX, offsetY)
+    textObj:ClearAllPoints()
+    -- Bake a 12px base gap so that offset=0 already gives breathing room.
+    local bx, by = 0, 0
+    if     anchor == "TOP"    then by =  12
+    elseif anchor == "BOTTOM" then by = -12
+    elseif anchor == "LEFT"   then bx = -12
+    elseif anchor == "RIGHT"  then bx =  12
+    end
+    textObj:SetPoint("CENTER", iconTex, anchor or "CENTER",
+        (offsetX or 0) + bx, (offsetY or 0) + by)
+end
 
 ------------------------------------------------------------
 -- LibCustomGlow
@@ -186,22 +208,22 @@ function DAT:CreateUI()
     borderFrame:SetPoint("TOP", frame, "TOP", 0, 0)
     borderFrame:SetFrameLevel(frame:GetFrameLevel() + 5)
 
-    -- Demon count text (top of icon)
+    -- Demon count text (anchored to chosen icon edge)
     demonText = frame:CreateFontString(nil, "OVERLAY")
-    demonText:SetPoint("TOP", frame, "TOP", db.demonOffsetX, db.demonOffsetY)
+    ApplyTextPoint(demonText, db.demonAnchor, db.demonOffsetX, db.demonOffsetY)
     DAT.Media:SetFont(demonText, db.demonFontSize)
     demonText:SetText("0")
     demonText:Hide()
 
     -- Count text
     countText = frame:CreateFontString(nil, "OVERLAY")
-    countText:SetPoint("CENTER", frame, "TOP", db.countOffsetX, -(sz / 2) + db.countOffsetY)
+    ApplyTextPoint(countText, db.countAnchor, db.countOffsetX, db.countOffsetY)
     DAT.Media:SetFont(countText, db.countFontSize)
     countText:SetText("0")
 
     -- Timer text
     timerText = frame:CreateFontString(nil, "OVERLAY")
-    timerText:SetPoint("TOP", frame, "TOP", db.timerOffsetX, -(sz + 4) + db.timerOffsetY)
+    ApplyTextPoint(timerText, db.timerAnchor, db.timerOffsetX, db.timerOffsetY)
     DAT.Media:SetFont(timerText, db.timerFontSize)
     timerText:SetText("")
     timerText:Hide()
@@ -237,16 +259,13 @@ function DAT:RebuildUI()
     borderFrame:ClearAllPoints()
     borderFrame:SetPoint("TOP", frame, "TOP", 0, 0)
 
-    demonText:ClearAllPoints()
-    demonText:SetPoint("TOP", frame, "TOP", db.demonOffsetX, db.demonOffsetY)
+    ApplyTextPoint(demonText, db.demonAnchor, db.demonOffsetX, db.demonOffsetY)
     DAT.Media:SetFont(demonText, db.demonFontSize)
 
-    countText:ClearAllPoints()
-    countText:SetPoint("CENTER", frame, "TOP", db.countOffsetX, -(sz / 2) + db.countOffsetY)
+    ApplyTextPoint(countText, db.countAnchor, db.countOffsetX, db.countOffsetY)
     DAT.Media:SetFont(countText, db.countFontSize)
 
-    timerText:ClearAllPoints()
-    timerText:SetPoint("TOP", frame, "TOP", db.timerOffsetX, -(sz + 4) + db.timerOffsetY)
+    ApplyTextPoint(timerText, db.timerAnchor, db.timerOffsetX, db.timerOffsetY)
     DAT.Media:SetFont(timerText, db.timerFontSize)
 
     self:ApplyBorder()

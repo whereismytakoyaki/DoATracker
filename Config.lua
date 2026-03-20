@@ -275,6 +275,20 @@ local function BuildPageFonts(cat)
         function() return DAT.db.countFontSize or 28 end,
         function(v) DAT.db.countFontSize = v; DAT:RebuildUI() end)
 
+    MakeDropdown(cat, "DAT_countAnchor", "Anchor", "CENTER",
+        function() return DAT.db.countAnchor or "CENTER" end,
+        function(v) DAT.db.countAnchor = v; DAT:RebuildUI() end,
+        function()
+            local c = Settings.CreateControlTextContainer()
+            c:Add("CENTER", "Center")
+            c:Add("TOP",    "Top")
+            c:Add("BOTTOM", "Bottom")
+            c:Add("LEFT",   "Left")
+            c:Add("RIGHT",  "Right")
+            return c:GetData()
+        end,
+        "Which edge of the icon center the text is pinned to. Offsets are then symmetric around that point.")
+
     MakeSlider(cat, "DAT_countOffsetX", "Offset X", 0,
         -100, 100, 1,
         function(v) return tostring(v) end,
@@ -296,6 +310,20 @@ local function BuildPageFonts(cat)
         function() return DAT.db.demonFontSize or 13 end,
         function(v) DAT.db.demonFontSize = v; DAT:RebuildUI() end)
 
+    MakeDropdown(cat, "DAT_demonAnchor", "Anchor", "TOP",
+        function() return DAT.db.demonAnchor or "TOP" end,
+        function(v) DAT.db.demonAnchor = v; DAT:RebuildUI() end,
+        function()
+            local c = Settings.CreateControlTextContainer()
+            c:Add("CENTER", "Center")
+            c:Add("TOP",    "Top")
+            c:Add("BOTTOM", "Bottom")
+            c:Add("LEFT",   "Left")
+            c:Add("RIGHT",  "Right")
+            return c:GetData()
+        end,
+        "Which edge of the icon center the text is pinned to. Offsets are then symmetric around that point.")
+
     MakeSlider(cat, "DAT_demonOffsetX", "Offset X", 0,
         -100, 100, 1,
         function(v) return tostring(v) end,
@@ -316,6 +344,20 @@ local function BuildPageFonts(cat)
         function(v) return tostring(v) end,
         function() return DAT.db.timerFontSize or 13 end,
         function(v) DAT.db.timerFontSize = v; DAT:RebuildUI() end)
+
+    MakeDropdown(cat, "DAT_timerAnchor", "Anchor", "BOTTOM",
+        function() return DAT.db.timerAnchor or "BOTTOM" end,
+        function(v) DAT.db.timerAnchor = v; DAT:RebuildUI() end,
+        function()
+            local c = Settings.CreateControlTextContainer()
+            c:Add("CENTER", "Center")
+            c:Add("TOP",    "Top")
+            c:Add("BOTTOM", "Bottom")
+            c:Add("LEFT",   "Left")
+            c:Add("RIGHT",  "Right")
+            return c:GetData()
+        end,
+        "Which edge of the icon center the text is pinned to. Offsets are then symmetric around that point.")
 
     MakeSlider(cat, "DAT_timerOffsetX", "Offset X", 0,
         -100, 100, 1,
