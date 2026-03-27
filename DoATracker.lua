@@ -64,6 +64,8 @@ DAT.DEFAULTS = {
     countLingerSec   = 10,
     startMsg         = "Dominion of Argus active!",
     endMsg           = "Dominion ended — HoG casts: {count}",
+    -- visibility
+    visibilityMode   = "always",
 }
 
 ------------------------------------------------------------
@@ -413,6 +415,45 @@ function DAT:ApplyGlow(active)
 end
 
 ------------------------------------------------------------
+-- DAT:UpdateVisibility()  — show/hide frame based on hard requirements
+--   and the user-selected visibilityMode.
+-- Hard requirements (all must pass):
+--   1. Player is a Warlock
+--   2. Player is in Demonology specialization (spec ID 266)
+--   3. Player has learned Summon Demonic Tyrant
+------------------------------------------------------------
+local DEMONOLOGY_SPEC_ID = 266
+
+function DAT:UpdateVisibility()
+    if not frame then return end
+
+    -- 1. Class: must be Warlock
+    local _, classFile = UnitClass("player")
+    if classFile ~= "WARLOCK" then frame:Hide(); return end
+
+    -- 2. Spec: must be Demonology
+    local specIndex = GetSpecialization and GetSpecialization()
+    if specIndex then
+        local specID = select(1, GetSpecializationInfo(specIndex))
+        if specID ~= DEMONOLOGY_SPEC_ID then frame:Hide(); return end
+    end
+
+    -- 3. Spell: must have Summon Demonic Tyrant learned
+    if not IsSpellKnown(TYRANT_ID) then frame:Hide(); return end
+
+    -- User visibility mode
+    local mode     = (self.db and self.db.visibilityMode) or "always"
+    local inCombat = UnitAffectingCombat("player")
+    local show
+    if     mode == "always"   then show = true
+    elseif mode == "combat"   then show = inCombat
+    elseif mode == "nocombat" then show = not inCombat
+    else                           show = false   -- "never"
+    end
+    if show then frame:Show() else frame:Hide() end
+end
+
+------------------------------------------------------------
 -- Countdown
 ------------------------------------------------------------
 local function UpdateCountdown()
@@ -513,11 +554,27 @@ end
 
 eventHandlers["PLAYER_LOGIN"] = function()
     DAT:CreateUI()
+    DAT:UpdateVisibility()
     print("|cffaa44ff[DoA Tracker]|r v1.2 loaded. Type |cffffd700/doat|r for commands.")
+end
+
+eventHandlers["PLAYER_REGEN_DISABLED"] = function()
+    DAT:UpdateVisibility()
+end
+
+eventHandlers["PLAYER_REGEN_ENABLED"] = function()
+    DAT:UpdateVisibility()
+end
+
+eventHandlers["PLAYER_SPECIALIZATION_CHANGED"] = function()
+    DAT:UpdateVisibility()
 end
 
 eventFrame:RegisterEvent("ADDON_LOADED")
 eventFrame:RegisterEvent("PLAYER_LOGIN")
+eventFrame:RegisterEvent("PLAYER_REGEN_DISABLED")
+eventFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
+eventFrame:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED")
 eventFrame:SetScript("OnEvent", function(_, event, a1)
     local h = eventHandlers[event]
     if h then h(a1) end
@@ -532,7 +589,7 @@ SlashCmdList["DOATRACKER"] = function(msg)
     if msg == "hide" then
         if frame then frame:Hide() end
     elseif msg == "show" then
-        if frame then frame:Show() end
+        DAT:UpdateVisibility()
     elseif msg == "reset" then
         if dominionTimer  then dominionTimer:Cancel();  dominionTimer  = nil end
         if updateTicker   then updateTicker:Cancel();   updateTicker   = nil end

@@ -171,6 +171,35 @@ local function BuildPageMain(cat)
         function() return DAT.db.locked end,
         function(v) DAT.db.locked = v; DAT:RebuildUI() end)
 
+    SectionHeader(cat, "Position")
+
+    MakeSlider(cat, "DAT_posX", "Position X", 0,
+        -500, 2500, 1,
+        function(v) return tostring(v) end,
+        function() return math.floor((DAT.db.posX or 0) + 0.5) end,
+        function(v) DAT.db.posX = v; DAT:ApplyFramePosition() end,
+        "Horizontal position from the left edge of the screen.")
+
+    MakeSlider(cat, "DAT_posY", "Position Y", 0,
+        -500, 1500, 1,
+        function(v) return tostring(v) end,
+        function() return math.floor((DAT.db.posY or 0) + 0.5) end,
+        function(v) DAT.db.posY = v; DAT:ApplyFramePosition() end,
+        "Vertical position from the bottom edge of the screen.")
+
+    MakeDropdown(cat, "DAT_visibilityMode", "Show Tracker", "always",
+        function() return DAT.db.visibilityMode or "always" end,
+        function(v) DAT.db.visibilityMode = v; DAT:UpdateVisibility() end,
+        function()
+            local c = Settings.CreateControlTextContainer()
+            c:Add("always",   "Always")
+            c:Add("combat",   "In Combat Only")
+            c:Add("nocombat", "Out of Combat Only")
+            c:Add("never",    "Never")
+            return c:GetData()
+        end,
+        "Controls when the tracker frame is visible.")
+
     SectionHeader(cat, "Icon")
 
     MakeSlider(cat, "DAT_brightness", "Icon Brightness", 35,
