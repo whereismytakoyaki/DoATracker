@@ -5,6 +5,7 @@ DAT = DAT or {}
 ------------------------------------------------------------
 local TYRANT_ID       = 265187   -- Summon Demonic Tyrant  (triggers Dominion)
 local HOG_ID          = 105174   -- Hand of Gul'dan
+local RUINATION_ID    = 434635   -- Ruination (Diabolist talent)
 local DOMINION_DURATION = 25     -- seconds
 local ICON_SPELL_ID   = 1276166  -- DoA aura spell ID (icon fetched via C_Spell)
 local GLOW_KEY        = "DoATrackerGlow"
@@ -527,7 +528,7 @@ castFrame:RegisterUnitEvent("UNIT_SPELLCAST_SUCCEEDED", "player")
 castFrame:SetScript("OnEvent", function(_, _, _, _, spellID)
     if spellID == TYRANT_ID then
         OnDominionStart()
-    elseif spellID == HOG_ID and dominionActive then
+    elseif (spellID == HOG_ID or spellID == RUINATION_ID) and dominionActive then
         hogCount = hogCount + 1
         if countText then countText:SetText(hogCount) end
         if demonText then
