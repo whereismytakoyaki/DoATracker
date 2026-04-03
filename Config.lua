@@ -497,6 +497,26 @@ local function BuildPageColors(cat)
             DAT.db.timerColor = { r=r, g=g, b=b }
             DAT:ApplyVisuals()
         end)
+
+    SectionHeader(cat, "Timer Warning Color")
+
+    MakeCheckbox(cat, "DAT_timerWarnEnabled", "Enable Timer Warning Color", true,
+        function() return DAT.db.timerWarnEnabled ~= false end,
+        function(v) DAT.db.timerWarnEnabled = v end,
+        "Change the timer text color when time is running low.")
+
+    MakeSlider(cat, "DAT_timerWarnThreshold", "Warn When ≤ (sec)", 5,
+        1, 20, 1,
+        function(v) return v .. "s" end,
+        function() return DAT.db.timerWarnThreshold or 5 end,
+        function(v) DAT.db.timerWarnThreshold = v end,
+        "Timer text switches to the warning color when this many seconds remain.")
+
+    MakeColorPicker(cat, "Timer Warning Color",
+        function() return DAT.db.timerWarnColor or { r=1.0, g=0.2, b=0.2 } end,
+        function(r, g, b)
+            DAT.db.timerWarnColor = { r=r, g=g, b=b }
+        end)
 end
 
 ------------------------------------------------------------
@@ -576,9 +596,16 @@ local function BuildPageGlow(cat)
 end
 
 ------------------------------------------------------------
--- Page: Messages
+-- Page: Announce
 ------------------------------------------------------------
-local function BuildPageMessages(cat)
+local function BuildPageAnnounce(cat)
+    SectionHeader(cat, "Announce")
+
+    MakeCheckbox(cat, "DAT_announceEnabled", "Enable Announce", true,
+        function() return DAT.db.announceEnabled ~= false end,
+        function(v) DAT.db.announceEnabled = v end,
+        "Print a message to the chat when Dominion starts or ends.")
+
     SectionHeader(cat, "Start Message")
     MakeTextInput(cat, "On Dominion Start",
         function() return DAT.db.startMsg or "Dominion of Argus active!" end,
@@ -589,11 +616,14 @@ local function BuildPageMessages(cat)
         function() return DAT.db.endMsg or "Dominion ended — HoG casts: {count}" end,
         function(v) DAT.db.endMsg = v end)
 
-    SectionHeader(cat, "Hint")
+    SectionHeader(cat, "Tags")
     local layout = SettingsPanel:GetLayout(cat)
     layout:AddInitializer(Settings.CreateElementInitializer(
         "SettingsListSectionHeaderTemplate",
-        { name = "|cffaaaaaaUse {count} in the end message to insert the HoG cast count.|r" }))
+        { name = "|cffffd700{count:hog}|r   — HoG casts" }))
+    layout:AddInitializer(Settings.CreateElementInitializer(
+        "SettingsListSectionHeaderTemplate",
+        { name = "|cffffd700{count:demon}|r — demons summoned" }))
 end
 
 ------------------------------------------------------------
@@ -618,8 +648,8 @@ function DAT.Config:Register()
     local glowCat    = Settings.RegisterVerticalLayoutSubcategory(mainCat, "Glow")
     BuildPageGlow(glowCat)
 
-    local msgCat     = Settings.RegisterVerticalLayoutSubcategory(mainCat, "Messages")
-    BuildPageMessages(msgCat)
+    local msgCat     = Settings.RegisterVerticalLayoutSubcategory(mainCat, "Announce")
+    BuildPageAnnounce(msgCat)
 
     DAT.Config.mainCat = mainCat
 end

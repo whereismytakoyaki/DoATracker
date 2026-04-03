@@ -47,6 +47,9 @@ DAT.DEFAULTS = {
     activeCountColor = { r = 0.15, g = 1.0,  b = 0.15 },
     inactCountColor  = { r = 0.55, g = 0.55, b = 0.55 },
     timerColor       = { r = 1.0,  g = 0.82, b = 0.0  },
+    timerWarnEnabled   = true,
+    timerWarnThreshold = 5,
+    timerWarnColor     = { r = 1.0,  g = 0.2,  b = 0.2  },
     activeDemonColor = { r = 1.0,  g = 0.84, b = 0.0  },
     inactDemonColor  = { r = 0.55, g = 0.55, b = 0.55 },
     iconBrightness   = 35,
@@ -61,10 +64,11 @@ DAT.DEFAULTS = {
     glowPixelThick   = 2,
     glowPixelXOffset = 0,
     glowPixelYOffset = 0,
-    -- display / messages
+    -- display / announce
     countLingerSec   = 10,
+    announceEnabled  = true,
     startMsg         = "Dominion of Argus active!",
-    endMsg           = "Dominion ended — HoG casts: {count}",
+    endMsg           = "Dominion ended — HoG: {count:hog}  Demons: {count:demon}",
     -- visibility
     visibilityMode   = "always",
 }
@@ -466,6 +470,15 @@ local function UpdateCountdown()
         return
     end
     timerText:SetText(string.format("%.1f%s", rem, suffix))
+    local db = DAT.db
+    local threshold = db.timerWarnThreshold or 5
+    if db.timerWarnEnabled ~= false and rem <= threshold then
+        local wc = db.timerWarnColor or { r = 1.0, g = 0.2, b = 0.2 }
+        timerText:SetTextColor(wc.r, wc.g, wc.b)
+    else
+        local tc = db.timerColor or { r = 1.0, g = 0.82, b = 0.0 }
+        timerText:SetTextColor(tc.r, tc.g, tc.b)
+    end
 end
 
 ------------------------------------------------------------
@@ -478,9 +491,14 @@ local function OnDominionEnd()
     if updateTicker then updateTicker:Cancel(); updateTicker = nil end
 
     local db  = DAT.db
-    local msg = (db.endMsg or "Dominion ended — HoG casts: {count}")
-                    :gsub("{count}", tostring(hogCount))
-    print("|cffaa44ff[DoA Tracker]|r " .. msg)
+    if db.announceEnabled ~= false then
+        local demonCount = math.floor(hogCount / 2)
+        local msg = (db.endMsg or "Dominion ended — HoG: {count:hog}  Demons: {count:demon}")
+                        :gsub("{count:hog}",   tostring(hogCount))
+                        :gsub("{count:demon}", tostring(demonCount))
+                        :gsub("{count}",       tostring(hogCount))  -- backward compat
+        print("|cffaa44ff[DoA Tracker]|r " .. msg)
+    end
 
     timerText:Hide()
     timerText:SetText("")
@@ -514,8 +532,10 @@ local function OnDominionStart()
     if countText then countText:SetText("0") end
     if demonText then demonText:SetText("0"); demonText:Hide() end
     if timerText then timerText:Show() end
-    local msg = DAT.db.startMsg or "Dominion of Argus active!"
-    print("|cffaa44ff[DoA Tracker]|r " .. msg)
+    if DAT.db.announceEnabled ~= false then
+        local msg = DAT.db.startMsg or "Dominion of Argus active!"
+        print("|cffaa44ff[DoA Tracker]|r " .. msg)
+    end
     DAT:ApplyVisuals()
     DAT:ApplyGlow(true)
 end
