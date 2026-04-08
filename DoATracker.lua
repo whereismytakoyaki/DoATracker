@@ -1,6 +1,19 @@
 DAT = DAT or {}
 
 ------------------------------------------------------------
+-- Upvalue hot globals
+------------------------------------------------------------
+local GetTime       = GetTime
+local floor         = math.floor
+local format        = string.format
+local tostring      = tostring
+local pairs         = pairs
+local type          = type
+local select        = select
+local print         = print
+local ipairs        = ipairs
+
+------------------------------------------------------------
 -- Constants
 ------------------------------------------------------------
 local TYRANT_ID       = 265187   -- Summon Demonic Tyrant  (triggers Dominion)
@@ -64,11 +77,8 @@ DAT.DEFAULTS = {
     glowPixelThick   = 2,
     glowPixelXOffset = 0,
     glowPixelYOffset = 0,
-    -- display / announce
+    -- display
     countLingerSec   = 10,
-    announceEnabled  = true,
-    startMsg         = "Dominion of Argus active!",
-    endMsg           = "Dominion ended — HoG: {count:hog}  Demons: {count:demon}",
     -- visibility
     visibilityMode   = "always",
 }
@@ -151,6 +161,68 @@ function DAT:Initialize()
     Migrate("activeDemonR",  "activeDemonG",  "activeDemonB",  "activeDemonColor")
     Migrate("inactDemonR",   "inactDemonG",   "inactDemonB",   "inactDemonColor")
 
+    -- Migrate old announce settings → rules
+    if db.announceEnabled ~= nil or db.startMsg ~= nil or db.endMsg ~= nil then
+        if not db.announceRules then
+            local ch = db.announceChannel or "SYSTEM"
+            local en = db.announceEnabled ~= false
+            db.announceRules = {
+                { enabled = en, channel = ch,
+                  msg = db.startMsg or "Dominion of Argus active!",
+                  conditions = {
+                      { condition = "dominion", operator = "start", threshold = 0 },
+                  }},
+                { enabled = en, channel = ch,
+                  msg = db.endMsg or "Dominion ended — HoG: {count:hog}  Demons: {count:demon}",
+                  conditions = {
+                      { condition = "dominion", operator = "end", threshold = 0 },
+                  }},
+            }
+        end
+        db.announceEnabled = nil
+        db.announceChannel = nil
+        db.startMsg = nil
+        db.endMsg = nil
+    end
+
+    -- Migrate old event-based rules → condition/operator
+    if db.announceRules then
+        local eventMap = {
+            start     = { "dominion", "start" },
+            ["end"]   = { "dominion", "end"   },
+            hog_gte   = { "hog",   ">=" },
+            hog_lte   = { "hog",   "<=" },
+            demon_gte = { "demon", ">=" },
+            demon_lte = { "demon", "<=" },
+        }
+        for _, rule in ipairs(db.announceRules) do
+            if rule.event and not rule.condition then
+                local m = eventMap[rule.event]
+                if m then
+                    rule.condition = m[1]
+                    rule.operator  = m[2]
+                end
+                rule.event = nil
+            end
+        end
+    end
+
+    -- Migrate single-condition rules → conditions array
+    if db.announceRules then
+        for _, rule in ipairs(db.announceRules) do
+            if rule.condition and not rule.conditions then
+                rule.conditions = {
+                    { condition = rule.condition,
+                      operator  = rule.operator,
+                      threshold = rule.threshold or 0 },
+                }
+                rule.condition = nil
+                rule.operator  = nil
+                rule.threshold = nil
+            end
+        end
+    end
+
     -- Merge defaults
     for k, v in pairs(self.DEFAULTS) do
         if self.db[k] == nil then
@@ -160,6 +232,22 @@ function DAT:Initialize()
                 self.db[k] = v
             end
         end
+    end
+
+    -- Ensure announce rules exist
+    if not self.db.announceRules then
+        self.db.announceRules = {
+            { enabled = true, channel = "SYSTEM",
+              msg = "Dominion of Argus active!",
+              conditions = {
+                  { condition = "dominion", operator = "start", threshold = 0 },
+              }},
+            { enabled = true, channel = "SYSTEM",
+              msg = "Dominion ended — HoG: {count:hog}  Demons: {count:demon}",
+              conditions = {
+                  { condition = "dominion", operator = "end", threshold = 0 },
+              }},
+        }
     end
 
     DAT.Media:Load()
@@ -284,6 +372,9 @@ end
 ------------------------------------------------------------
 -- DAT:ApplyBorder()
 ------------------------------------------------------------
+local _borderInsets   = { left = 0, right = 0, top = 0, bottom = 0 }
+local _borderBackdrop = { edgeFile = nil, edgeSize = 0, insets = _borderInsets }
+
 function DAT:ApplyBorder()
     if not borderFrame then return end
     local db = self.db
@@ -294,11 +385,14 @@ function DAT:ApplyBorder()
     end
 
     local bsz = db.borderSize or 12
-    borderFrame:SetBackdrop({
-        edgeFile = db.borderPath,
-        edgeSize = bsz,
-        insets   = { left = bsz/2, right = bsz/2, top = bsz/2, bottom = bsz/2 },
-    })
+    local half = bsz / 2
+    _borderBackdrop.edgeFile = db.borderPath
+    _borderBackdrop.edgeSize = bsz
+    _borderInsets.left   = half
+    _borderInsets.right  = half
+    _borderInsets.top    = half
+    _borderInsets.bottom = half
+    borderFrame:SetBackdrop(_borderBackdrop)
 
     local c = dominionActive and db.borderColor or db.inactBorderColor
     borderFrame:SetBackdropBorderColor(c.r, c.g, c.b, 1)
@@ -382,11 +476,14 @@ end
 ------------------------------------------------------------
 -- DAT:ApplyGlow()
 ------------------------------------------------------------
+local _glowColor = { 1, 1, 1, 1 }
+local _procOpts   = { color = _glowColor, startAnim = false, duration = 1, key = GLOW_KEY }
+
 function DAT:ApplyGlow(active)
     local lcg = GetLCG()
     if not lcg or not borderFrame then return end
     local db  = self.db
-    local tgt = borderFrame   -- glow only the icon area, not the timer text
+    local tgt = borderFrame
 
     -- Stop all types first
     if lcg.PixelGlow_Stop    then lcg.PixelGlow_Stop(tgt, GLOW_KEY)    end
@@ -397,12 +494,12 @@ function DAT:ApplyGlow(active)
     if not (active and db.glowEnabled) then return end
 
     local c = db.glowColor or { r = 1, g = 1, b = 1 }
-    local color = { c.r, c.g, c.b, 1 }
+    _glowColor[1], _glowColor[2], _glowColor[3] = c.r, c.g, c.b
     local t = db.glowType or "proc"
 
     if t == "pixel" then
         local len = db.glowPixelLength or 3
-        lcg.PixelGlow_Start(tgt, color,
+        lcg.PixelGlow_Start(tgt, _glowColor,
             db.glowPixelN       or 8,
             db.glowPixelFreq    or 0.25,
             len > 0 and len or nil,
@@ -411,11 +508,12 @@ function DAT:ApplyGlow(active)
             db.glowPixelYOffset or 0,
             false, GLOW_KEY)
     elseif t == "autocast" then
-        lcg.AutoCastGlow_Start(tgt, color, 4, 0.2, 1, 0, 0, GLOW_KEY)
+        lcg.AutoCastGlow_Start(tgt, _glowColor, 4, 0.2, 1, 0, 0, GLOW_KEY)
     elseif t == "button" then
-        lcg.ButtonGlow_Start(tgt, color)
+        lcg.ButtonGlow_Start(tgt, _glowColor)
     else
-        lcg.ProcGlow_Start(tgt, { color = color, startAnim = false, duration = 1, key = GLOW_KEY })
+        _procOpts.color = _glowColor
+        lcg.ProcGlow_Start(tgt, _procOpts)
     end
 end
 
@@ -428,18 +526,22 @@ end
 --   3. Player has learned Summon Demonic Tyrant
 ------------------------------------------------------------
 local DEMONOLOGY_SPEC_ID = 266
+local _playerIsWarlock   = nil   -- cached on first call
 
 function DAT:UpdateVisibility()
     if not frame then return end
 
-    -- 1. Class: must be Warlock
-    local _, classFile = UnitClass("player")
-    if classFile ~= "WARLOCK" then frame:Hide(); return end
+    -- 1. Class: must be Warlock (cache — class never changes)
+    if _playerIsWarlock == nil then
+        local _, classFile = UnitClass("player")
+        _playerIsWarlock = (classFile == "WARLOCK")
+    end
+    if not _playerIsWarlock then frame:Hide(); return end
 
     -- 2. Spec: must be Demonology
     local specIndex = GetSpecialization and GetSpecialization()
     if specIndex then
-        local specID = select(1, GetSpecializationInfo(specIndex))
+        local specID = GetSpecializationInfo(specIndex)
         if specID ~= DEMONOLOGY_SPEC_ID then frame:Hide(); return end
     end
 
@@ -461,23 +563,98 @@ end
 ------------------------------------------------------------
 -- Countdown
 ------------------------------------------------------------
+local _timerInWarnState = false   -- track to avoid redundant SetTextColor
+
 local function UpdateCountdown()
     if not timerText then return end
     local rem = dominionEndTime - GetTime()
-    local suffix = DAT.db.timerShowSuffix and "s" or ""
+    local db  = DAT.db
+    local suffix = db.timerShowSuffix and "s" or ""
     if rem <= 0 then
         timerText:SetText("0.0" .. suffix)
         return
     end
-    timerText:SetText(string.format("%.1f%s", rem, suffix))
-    local db = DAT.db
-    local threshold = db.timerWarnThreshold or 5
-    if db.timerWarnEnabled ~= false and rem <= threshold then
-        local wc = db.timerWarnColor or { r = 1.0, g = 0.2, b = 0.2 }
-        timerText:SetTextColor(wc.r, wc.g, wc.b)
-    else
-        local tc = db.timerColor or { r = 1.0, g = 0.82, b = 0.0 }
-        timerText:SetTextColor(tc.r, tc.g, tc.b)
+    timerText:SetText(format("%.1f%s", rem, suffix))
+    local wantWarn = db.timerWarnEnabled ~= false and rem <= (db.timerWarnThreshold or 5)
+    if wantWarn ~= _timerInWarnState then
+        _timerInWarnState = wantWarn
+        if wantWarn then
+            local wc = db.timerWarnColor or { r = 1.0, g = 0.2, b = 0.2 }
+            timerText:SetTextColor(wc.r, wc.g, wc.b)
+        else
+            local tc = db.timerColor or { r = 1.0, g = 0.82, b = 0.0 }
+            timerText:SetTextColor(tc.r, tc.g, tc.b)
+        end
+    end
+end
+
+------------------------------------------------------------
+-- Announce helpers
+------------------------------------------------------------
+local function SendAnnounce(msg, channel)
+    if (channel or "SYSTEM") == "SYSTEM" then
+        print("|cff9482c9[DoA Tracker]|r " .. msg)
+        return
+    end
+    -- SAY/YELL only work from addon code inside instances
+    if (channel == "SAY" or channel == "YELL") and not IsInInstance() then
+        print("|cff9482c9[DoA Tracker]|r " .. msg)
+        return
+    end
+    SendChatMessage(msg, channel)
+end
+
+local function FormatAnnounceMsg(msg, hog, demon)
+    return msg:gsub("{count:hog}", tostring(hog))
+              :gsub("{count:demon}", tostring(demon))
+end
+
+local function EvalSingleCondition(cond, hog, demon)
+    local subject = cond.condition or "hog"
+    local op      = cond.operator  or ">="
+    local t       = cond.threshold or 0
+    local val     = (subject == "hog") and hog or demon
+    if     op == ">"  then return val >  t
+    elseif op == ">=" then return val >= t
+    elseif op == "<"  then return val <  t
+    elseif op == "<=" then return val <= t
+    elseif op == "="  then return val == t
+    end
+    return false
+end
+
+local function CheckAnnounceRules(event)
+    local rules = DAT.db.announceRules
+    if not rules then return end
+    local hog   = hogCount
+    local demon = floor(hogCount / 2)
+    for _, rule in ipairs(rules) do
+        if rule.enabled then
+            local fire  = false
+            local conds = rule.conditions
+            if conds and #conds > 0 then
+                local first = conds[1]
+                if (first.condition or "dominion") == "dominion" then
+                    -- Event-based: dominion start / end
+                    if first.operator == event then fire = true end
+                elseif event == "end" then
+                    -- Count-based: evaluate all conditions with AND / OR
+                    fire = EvalSingleCondition(first, hog, demon)
+                    for i = 2, #conds do
+                        local c   = conds[i]
+                        local val = EvalSingleCondition(c, hog, demon)
+                        if (c.logic or "and") == "or" then
+                            fire = fire or val
+                        else
+                            fire = fire and val
+                        end
+                    end
+                end
+            end
+            if fire then
+                SendAnnounce(FormatAnnounceMsg(rule.msg, hog, demon), rule.channel)
+            end
+        end
     end
 end
 
@@ -488,17 +665,11 @@ local function OnDominionEnd()
     dominionActive        = false
     DAT._dominionActive   = false
     dominionTimer         = nil
+    _timerInWarnState     = false
     if updateTicker then updateTicker:Cancel(); updateTicker = nil end
 
     local db  = DAT.db
-    if db.announceEnabled ~= false then
-        local demonCount = math.floor(hogCount / 2)
-        local msg = (db.endMsg or "Dominion ended — HoG: {count:hog}  Demons: {count:demon}")
-                        :gsub("{count:hog}",   tostring(hogCount))
-                        :gsub("{count:demon}", tostring(demonCount))
-                        :gsub("{count}",       tostring(hogCount))  -- backward compat
-        print("|cffaa44ff[DoA Tracker]|r " .. msg)
-    end
+    CheckAnnounceRules("end")
 
     timerText:Hide()
     timerText:SetText("")
@@ -532,40 +703,32 @@ local function OnDominionStart()
     if countText then countText:SetText("0") end
     if demonText then demonText:SetText("0"); demonText:Hide() end
     if timerText then timerText:Show() end
-    if DAT.db.announceEnabled ~= false then
-        local msg = DAT.db.startMsg or "Dominion of Argus active!"
-        print("|cffaa44ff[DoA Tracker]|r " .. msg)
-    end
+    CheckAnnounceRules("start")
     DAT:ApplyVisuals()
     DAT:ApplyGlow(true)
 end
 
 ------------------------------------------------------------
--- Cast watcher: player only
+-- Single event frame for all events
 ------------------------------------------------------------
-local castFrame = CreateFrame("Frame")
-castFrame:RegisterUnitEvent("UNIT_SPELLCAST_SUCCEEDED", "player")
-castFrame:SetScript("OnEvent", function(_, _, _, _, spellID)
+local eventFrame    = CreateFrame("Frame")
+local eventHandlers = {}
+
+eventHandlers["UNIT_SPELLCAST_SUCCEEDED"] = function(_, _, spellID)
     if spellID == TYRANT_ID then
         OnDominionStart()
     elseif (spellID == HOG_ID or spellID == RUINATION_ID) and dominionActive then
         hogCount = hogCount + 1
         if countText then countText:SetText(hogCount) end
         if demonText then
-            local dc = math.floor(hogCount / 2)
+            local dc = floor(hogCount / 2)
             if dc > 0 then
                 demonText:SetText(dc)
                 demonText:Show()
             end
         end
     end
-end)
-
-------------------------------------------------------------
--- Main event frame
-------------------------------------------------------------
-local eventFrame    = CreateFrame("Frame")
-local eventHandlers = {}
+end
 
 eventHandlers["ADDON_LOADED"] = function(addon)
     if addon == "DoATracker" then
@@ -576,7 +739,7 @@ end
 eventHandlers["PLAYER_LOGIN"] = function()
     DAT:CreateUI()
     DAT:UpdateVisibility()
-    print("|cffaa44ff[DoA Tracker]|r v1.2 loaded. Type |cffffd700/doat|r for commands.")
+    print("|cff9482c9[DoA Tracker]|r v1.2 loaded. Type |cffffd700/doat|r for commands.")
 end
 
 eventHandlers["PLAYER_REGEN_DISABLED"] = function()
@@ -596,9 +759,10 @@ eventFrame:RegisterEvent("PLAYER_LOGIN")
 eventFrame:RegisterEvent("PLAYER_REGEN_DISABLED")
 eventFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
 eventFrame:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED")
-eventFrame:SetScript("OnEvent", function(_, event, a1)
+eventFrame:RegisterUnitEvent("UNIT_SPELLCAST_SUCCEEDED", "player")
+eventFrame:SetScript("OnEvent", function(_, event, a1, a2, a3)
     local h = eventHandlers[event]
-    if h then h(a1) end
+    if h then h(a1, a2, a3) end
 end)
 
 ------------------------------------------------------------
@@ -607,7 +771,9 @@ end)
 SLASH_DOATRACKER1 = "/doat"
 SlashCmdList["DOATRACKER"] = function(msg)
     msg = strtrim(msg or ""):lower()
-    if msg == "hide" then
+    if msg == "announce" then
+        DAT.Config:OpenAnnounceEditor()
+    elseif msg == "hide" then
         if frame then frame:Hide() end
     elseif msg == "show" then
         DAT:UpdateVisibility()
@@ -623,12 +789,12 @@ SlashCmdList["DOATRACKER"] = function(msg)
         if timerText then timerText:Hide(); timerText:SetText("") end
         DAT:ApplyVisuals()
         DAT:ApplyGlow(false)
-        print("|cffaa44ff[DoA Tracker]|r Reset.")
+        print("|cff9482c9[DoA Tracker]|r Reset.")
     else
         if DAT.Config and DAT.Config.mainCat and Settings and Settings.OpenToCategory then
             Settings.OpenToCategory(DAT.Config.mainCat:GetID())
         else
-            print("|cffaa44ff[DoA Tracker]|r v1.2")
+            print("|cff9482c9[DoA Tracker]|r v1.2")
             print("  |cffffd700/doat|r         — open settings")
             print("  |cffffd700/doat hide|r    — hide tracker")
             print("  |cffffd700/doat show|r    — show tracker")

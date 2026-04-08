@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(wc -l *.lua)",
+      "Bash(lua -e \"loadfile\\('Config.lua'\\)\")"
+    ]
+  }
+}
