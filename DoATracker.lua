@@ -766,7 +766,7 @@ end
 eventHandlers["PLAYER_LOGIN"] = function()
     DAT:CreateUI()
     DAT:UpdateVisibility()
-    print("|cff9482c9[DoA Tracker]|r v1.2 loaded. Type |cffffd700/doat|r for commands.")
+    print("|cff9482c9[DoA Tracker]|r v1.0.4 loaded. Type |cffffd700/doat|r for commands.")
 end
 
 eventHandlers["PLAYER_REGEN_DISABLED"] = function()
@@ -800,32 +800,13 @@ SlashCmdList["DOATRACKER"] = function(msg)
     msg = strtrim(msg or ""):lower()
     if msg == "announce" then
         DAT.Config:OpenAnnounceEditor()
-    elseif msg == "hide" then
-        if frame then frame:Hide() end
-    elseif msg == "show" then
-        DAT:UpdateVisibility()
-    elseif msg == "reset" then
-        if dominionTimer  then dominionTimer:Cancel();  dominionTimer  = nil end
-        if updateTicker   then updateTicker:Cancel();   updateTicker   = nil end
-        if lingerTimer    then lingerTimer:Cancel();    lingerTimer    = nil end
-        dominionActive      = false
-        DAT._dominionActive = false
-        hogCount            = 0
-        if countText then countText:SetText("0") end
-        if demonText then demonText:SetText("0"); demonText:Hide() end
-        if timerText then timerText:Hide(); timerText:SetText("") end
-        DAT:ApplyVisuals()
-        DAT:ApplyGlow(false)
-        print("|cff9482c9[DoA Tracker]|r Reset.")
     else
         if DAT.Config and DAT.Config.mainCat and Settings and Settings.OpenToCategory then
             Settings.OpenToCategory(DAT.Config.mainCat:GetID())
         else
-            print("|cff9482c9[DoA Tracker]|r v1.2")
-            print("  |cffffd700/doat|r         — open settings")
-            print("  |cffffd700/doat hide|r    — hide tracker")
-            print("  |cffffd700/doat show|r    — show tracker")
-            print("  |cffffd700/doat reset|r   — reset state")
+            print("|cff9482c9[DoA Tracker]|r v1.0.4")
+            print("  |cffffd700/doat|r           — open settings")
+            print("  |cffffd700/doat announce|r  — open announce editor")
         end
     end
 end
