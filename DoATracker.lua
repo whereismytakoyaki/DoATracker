@@ -81,6 +81,8 @@ DAT.DEFAULTS = {
     countLingerSec   = 10,
     -- visibility
     visibilityMode   = "always",
+    hideWhenNoBuff   = false,
+    hideDelaySec     = 0,
 }
 
 ------------------------------------------------------------
@@ -92,6 +94,7 @@ local dominionTimer   = nil
 local dominionEndTime = 0
 local updateTicker    = nil
 local lingerTimer     = nil
+local hideDelayTimer  = nil
 DAT._dominionActive   = false   -- exposed for Config.lua
 
 ------------------------------------------------------------
@@ -548,6 +551,27 @@ function DAT:UpdateVisibility()
     -- 3. Spell: must have Summon Demonic Tyrant learned
     if not IsSpellKnown(TYRANT_ID) then frame:Hide(); return end
 
+    -- Hide when no buff option
+    if self.db.hideWhenNoBuff and not dominionActive then
+        local delay = self.db.hideDelaySec or 0
+        if delay <= 0 then
+            frame:Hide(); return
+        end
+        -- With delay: start a timer if not already running
+        if not hideDelayTimer then
+            hideDelayTimer = C_Timer.NewTimer(delay, function()
+                hideDelayTimer = nil
+                if not dominionActive and self.db.hideWhenNoBuff then
+                    frame:Hide()
+                end
+            end)
+        end
+        return
+    end
+
+    -- Cancel hide delay if buff is active or option turned off
+    if hideDelayTimer then hideDelayTimer:Cancel(); hideDelayTimer = nil end
+
     -- User visibility mode
     local mode     = (self.db and self.db.visibilityMode) or "always"
     local inCombat = UnitAffectingCombat("player")
@@ -673,6 +697,7 @@ local function OnDominionEnd()
 
     timerText:Hide()
     timerText:SetText("")
+    DAT:UpdateVisibility()
     DAT:ApplyVisuals()
     DAT:ApplyGlow(false)
 
@@ -694,6 +719,7 @@ local function OnDominionStart()
     if dominionTimer  then dominionTimer:Cancel()  end
     if updateTicker   then updateTicker:Cancel()   end
     if lingerTimer    then lingerTimer:Cancel();  lingerTimer = nil end
+    if hideDelayTimer then hideDelayTimer:Cancel(); hideDelayTimer = nil end
     dominionActive        = true
     DAT._dominionActive   = true
     hogCount              = 0
@@ -704,6 +730,7 @@ local function OnDominionStart()
     if demonText then demonText:SetText("0"); demonText:Hide() end
     if timerText then timerText:Show() end
     CheckAnnounceRules("start")
+    DAT:UpdateVisibility()
     DAT:ApplyVisuals()
     DAT:ApplyGlow(true)
 end

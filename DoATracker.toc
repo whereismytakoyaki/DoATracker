@@ -1,7 +1,8 @@
-## Interface: 120001
+## Interface: 120001,120005
 ## Title: DoA Tracker
-## Notes: Tracks Hand of Gul'dan casts during Dominion of Argus (Diabolist)
-## Version: 1.0.3
+## Author: whereismytakoyaki
+## Notes: A handy addon for Demonology Warlock that tracks Hand of Gul'dan casts during Dominion of Argus
+## Version: 1.0.4
 ## SavedVariables: DoATrackerDB
 
 Media.lua

@@ -214,6 +214,18 @@ local function BuildPageMain(cat)
         end,
         "Controls when the tracker frame is visible.")
 
+    MakeCheckbox(cat, "DAT_hideWhenNoBuff", "Hide When No Buff", false,
+        function() return DAT.db.hideWhenNoBuff or false end,
+        function(v) DAT.db.hideWhenNoBuff = v; DAT:UpdateVisibility() end,
+        "Hide the tracker icon when Dominion of Argus is not active.")
+
+    MakeSlider(cat, "DAT_hideDelaySec", "Hide Delay", 0,
+        0, 30, 1,
+        function(v) return v .. "s" end,
+        function() return DAT.db.hideDelaySec or 0 end,
+        function(v) DAT.db.hideDelaySec = v end,
+        "Seconds to wait after the buff ends before hiding the tracker. 0 = hide immediately. Only applies when 'Hide When No Buff' is enabled.")
+
     SectionHeader(cat, "Icon")
 
     MakeSlider(cat, "DAT_brightness", "Icon Brightness", 35,
@@ -1342,6 +1354,10 @@ local function BuildPageAnnounce(cat)
     layout:AddInitializer(Settings.CreateElementInitializer(
         "SettingsListSectionHeaderTemplate",
         { name = "Or use |cffffd700/doat announce|r to open the editor." }))
+
+    layout:AddInitializer(Settings.CreateElementInitializer(
+        "SettingsListSectionHeaderTemplate",
+        { name = "|cffaaaaaaNote: SAY and YELL only work inside instances.|r" }))
 end
 
 ------------------------------------------------------------
