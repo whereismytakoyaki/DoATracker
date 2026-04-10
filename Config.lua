@@ -463,6 +463,12 @@ local function BuildPageBorder(cat)
         function() return DAT.db.borderSize or 12 end,
         function(v) DAT.db.borderSize = v; DAT:ApplyBorder() end)
 
+    MakeSlider(cat, "DAT_borderOffset", "Border Offset", 0,
+        -16, 32, 1,
+        function(v) return v .. " px" end,
+        function() return DAT.db.borderOffset or 0 end,
+        function(v) DAT.db.borderOffset = v; DAT:ApplyBorder() end)
+
     SectionHeader(cat, "Active Border Color")
     MakeColorPicker(cat, "Active Border",
         function() return DAT.db.borderColor or { r=0.1, g=0.9, b=0.1 } end,

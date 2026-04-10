@@ -55,6 +55,7 @@ DAT.DEFAULTS = {
     borderName       = "None",
     borderPath       = nil,
     borderSize       = 12,
+    borderOffset     = 0,
     borderColor      = { r = 0.1,  g = 0.9,  b = 0.1  },
     inactBorderColor = { r = 0.15, g = 0.15, b = 0.15 },
     activeCountColor = { r = 0.15, g = 1.0,  b = 0.15 },
@@ -104,6 +105,7 @@ local frame       = nil
 local iconTex     = nil
 local darkOverlay = nil
 local borderFrame = nil
+local glowFrame   = nil
 local countText   = nil
 local timerText   = nil
 local demonText   = nil
@@ -300,11 +302,23 @@ function DAT:CreateUI()
     darkOverlay:SetPoint("TOP", frame, "TOP", 0, 0)
     darkOverlay:SetColorTexture(0, 0, 0, db.overlayAlpha / 100)
 
-    -- Border frame
+    -- Border frame (backdrop only — keep isolated from LibCustomGlow, which
+    -- attaches child overlays to its target and corrupts BackdropTemplate's
+    -- edge-texture rebuild on later SetBackdrop calls).
+    -- Anchored via TOPLEFT/BOTTOMRIGHT to iconTex so db.borderOffset can
+    -- expand it outward (positive offset) or inset it (negative offset).
     borderFrame = CreateFrame("Frame", nil, frame, "BackdropTemplate")
-    borderFrame:SetSize(sz, sz)
-    borderFrame:SetPoint("TOP", frame, "TOP", 0, 0)
+    local bo = db.borderOffset or 0
+    borderFrame:SetPoint("TOPLEFT",     iconTex, "TOPLEFT",     -bo,  bo)
+    borderFrame:SetPoint("BOTTOMRIGHT", iconTex, "BOTTOMRIGHT",  bo, -bo)
     borderFrame:SetFrameLevel(frame:GetFrameLevel() + 5)
+
+    -- Dedicated frame for LibCustomGlow so glow overlays never touch
+    -- borderFrame's backdrop state. Tracks borderFrame so glow follows offset.
+    glowFrame = CreateFrame("Frame", nil, frame)
+    glowFrame:SetPoint("TOPLEFT",     borderFrame, "TOPLEFT",     0, 0)
+    glowFrame:SetPoint("BOTTOMRIGHT", borderFrame, "BOTTOMRIGHT", 0, 0)
+    glowFrame:SetFrameLevel(frame:GetFrameLevel() + 6)
 
     -- Demon count text (anchored to chosen icon edge)
     demonText = frame:CreateFontString(nil, "OVERLAY")
@@ -353,9 +367,14 @@ function DAT:RebuildUI()
     darkOverlay:ClearAllPoints()
     darkOverlay:SetPoint("TOP", frame, "TOP", 0, 0)
 
-    borderFrame:SetSize(sz, sz)
+    local bo = db.borderOffset or 0
     borderFrame:ClearAllPoints()
-    borderFrame:SetPoint("TOP", frame, "TOP", 0, 0)
+    borderFrame:SetPoint("TOPLEFT",     iconTex, "TOPLEFT",     -bo,  bo)
+    borderFrame:SetPoint("BOTTOMRIGHT", iconTex, "BOTTOMRIGHT",  bo, -bo)
+
+    glowFrame:ClearAllPoints()
+    glowFrame:SetPoint("TOPLEFT",     borderFrame, "TOPLEFT",     0, 0)
+    glowFrame:SetPoint("BOTTOMRIGHT", borderFrame, "BOTTOMRIGHT", 0, 0)
 
     ApplyTextPoint(demonText, db.demonAnchor, db.demonOffsetX, db.demonOffsetY)
     DAT.Media:SetFont(demonText, db.demonFontSize)
@@ -375,27 +394,31 @@ end
 ------------------------------------------------------------
 -- DAT:ApplyBorder()
 ------------------------------------------------------------
-local _borderInsets   = { left = 0, right = 0, top = 0, bottom = 0 }
-local _borderBackdrop = { edgeFile = nil, edgeSize = 0, insets = _borderInsets }
-
+-- Allocate a fresh backdrop table every call. Only invoked from config UI
+-- interactions, so the extra allocation is inconsequential.
 function DAT:ApplyBorder()
     if not borderFrame then return end
     local db = self.db
+
+    -- Re-anchor for current offset (borderFrame tracks iconTex; positive
+    -- offset expands outward, negative insets it).
+    local bo = db.borderOffset or 0
+    borderFrame:ClearAllPoints()
+    borderFrame:SetPoint("TOPLEFT",     iconTex, "TOPLEFT",     -bo,  bo)
+    borderFrame:SetPoint("BOTTOMRIGHT", iconTex, "BOTTOMRIGHT",  bo, -bo)
 
     if not db.borderPath then
         borderFrame:SetBackdrop(nil)
         return
     end
 
-    local bsz = db.borderSize or 12
+    local bsz  = db.borderSize or 12
     local half = bsz / 2
-    _borderBackdrop.edgeFile = db.borderPath
-    _borderBackdrop.edgeSize = bsz
-    _borderInsets.left   = half
-    _borderInsets.right  = half
-    _borderInsets.top    = half
-    _borderInsets.bottom = half
-    borderFrame:SetBackdrop(_borderBackdrop)
+    borderFrame:SetBackdrop({
+        edgeFile = db.borderPath,
+        edgeSize = bsz,
+        insets   = { left = half, right = half, top = half, bottom = half },
+    })
 
     local c = dominionActive and db.borderColor or db.inactBorderColor
     borderFrame:SetBackdropBorderColor(c.r, c.g, c.b, 1)
@@ -484,9 +507,9 @@ local _procOpts   = { color = _glowColor, startAnim = false, duration = 1, key =
 
 function DAT:ApplyGlow(active)
     local lcg = GetLCG()
-    if not lcg or not borderFrame then return end
+    if not lcg or not glowFrame then return end
     local db  = self.db
-    local tgt = borderFrame
+    local tgt = glowFrame
 
     -- Stop all types first
     if lcg.PixelGlow_Stop    then lcg.PixelGlow_Stop(tgt, GLOW_KEY)    end
