@@ -28,7 +28,8 @@ local GLOW_KEY        = "DoATrackerGlow"
 ------------------------------------------------------------
 DAT.DEFAULTS = {
     iconSize         = 72,
-    scale            = 100,
+    iconZoom         = 8,
+    guiScale         = 100,
     locked           = false,
     posX             = nil,
     posY             = nil,
@@ -290,7 +291,8 @@ function DAT:CreateUI()
     iconTex = frame:CreateTexture(nil, "BACKGROUND")
     iconTex:SetSize(sz, sz)
     iconTex:SetPoint("TOP", frame, "TOP", 0, 0)
-    iconTex:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+    local _z = (db.iconZoom or 8) / 100
+    iconTex:SetTexCoord(_z, 1 - _z, _z, 1 - _z)
     local _si = C_Spell.GetSpellInfo(ICON_SPELL_ID)
     if _si and _si.iconID then
         iconTex:SetTexture(_si.iconID)
@@ -344,7 +346,6 @@ function DAT:CreateUI()
     self:ApplyVisuals()
     self:ApplyShadow()
     self:ApplyFramePosition()
-    frame:SetScale(db.scale / 100)
 end
 
 ------------------------------------------------------------
@@ -357,11 +358,12 @@ function DAT:RebuildUI()
 
     frame:SetSize(sz, sz + 22)
     frame:EnableMouse(not db.locked)
-    frame:SetScale(db.scale / 100)
 
     iconTex:SetSize(sz, sz)
     iconTex:ClearAllPoints()
     iconTex:SetPoint("TOP", frame, "TOP", 0, 0)
+    local z = (db.iconZoom or 8) / 100
+    iconTex:SetTexCoord(z, 1 - z, z, 1 - z)
 
     darkOverlay:SetSize(sz, sz)
     darkOverlay:ClearAllPoints()
@@ -422,6 +424,15 @@ function DAT:ApplyBorder()
 
     local c = dominionActive and db.borderColor or db.inactBorderColor
     borderFrame:SetBackdropBorderColor(c.r, c.g, c.b, 1)
+end
+
+------------------------------------------------------------
+-- DAT:ApplyIconZoom()
+------------------------------------------------------------
+function DAT:ApplyIconZoom()
+    if not iconTex then return end
+    local z = (self.db.iconZoom or 8) / 100
+    iconTex:SetTexCoord(z, 1 - z, z, 1 - z)
 end
 
 ------------------------------------------------------------
@@ -789,7 +800,7 @@ end
 eventHandlers["PLAYER_LOGIN"] = function()
     DAT:CreateUI()
     DAT:UpdateVisibility()
-    print("|cff9482c9[DoA Tracker]|r v1.0.4 loaded. Type |cffffd700/doat|r for commands.")
+    print("|cff9482c9[DoA Tracker]|r v1.0.5 loaded. Type |cffffd700/doat|r to open settings.")
 end
 
 eventHandlers["PLAYER_REGEN_DISABLED"] = function()
@@ -819,20 +830,8 @@ end)
 -- Slash commands
 ------------------------------------------------------------
 SLASH_DOATRACKER1 = "/doat"
-SlashCmdList["DOATRACKER"] = function(msg)
-    msg = strtrim(msg or ""):lower()
-    if msg == "announce" then
-        DAT.Config:OpenAnnounceEditor()
-    elseif msg == "close" then
-        if DAT.Config and DAT.Config.Close then DAT.Config:Close() end
-    elseif msg == "help" or msg == "?" then
-        print("|cff9482c9[DoA Tracker]|r")
-        print("  |cffffd700/doat|r           — open settings")
-        print("  |cffffd700/doat announce|r  — open announce editor")
-        print("  |cffffd700/doat close|r     — close the settings window")
-    else
-        if DAT.Config and DAT.Config.Open then
-            DAT.Config:Open()
-        end
+SlashCmdList["DOATRACKER"] = function()
+    if DAT.Config and DAT.Config.Open then
+        DAT.Config:Open()
     end
 end

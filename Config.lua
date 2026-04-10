@@ -5,6 +5,7 @@ local AceGUI = LibStub and LibStub("AceGUI-3.0", true)
 
 -- forward declarations (assigned in DAT.Config:Open / near SelectGroup)
 local _currentTree
+local _configFrame
 local RefreshPage
 
 ------------------------------------------------------------
@@ -141,13 +142,40 @@ end
 -- Page: Main
 ------------------------------------------------------------
 local function BuildPageMain(c)
-    local fg = AddGroup(c, "Frame")
-    AddSlider(fg, "Icon Size", 32, 128, 1,
+    local ug = AddGroup(c, "UI")
+    local uiScaleSlider = AceGUI:Create("Slider")
+    uiScaleSlider:SetLabel("UI Scale")
+    uiScaleSlider:SetSliderValues(50, 200, 1)
+    uiScaleSlider:SetValue(DAT.db.guiScale or 100)
+    uiScaleSlider:SetRelativeWidth(0.5)
+    -- Apply scale only on mouse-up: while dragging, the slider itself lives
+    -- inside the scaled frame, so continuous SetScale calls shift the thumb
+    -- under the cursor and feed back into the value, causing flicker.
+    uiScaleSlider:SetCallback("OnValueChanged", function(_, _, val)
+        DAT.db.guiScale = math.floor(val + 0.5)
+    end)
+    uiScaleSlider:SetCallback("OnMouseUp", function(_, _, val)
+        val = math.floor(val + 0.5)
+        DAT.db.guiScale = val
+        if _configFrame and _configFrame.frame then
+            _configFrame.frame:SetScale(val / 100)
+        end
+    end)
+    ug:AddChild(uiScaleSlider)
+
+    local ig = AddGroup(c, "Icon")
+    AddSlider(ig, "Icon Size", 32, 128, 1,
         function() return DAT.db.iconSize or 72 end,
         function(v) DAT.db.iconSize = v; DAT:RebuildUI() end)
-    AddSlider(fg, "Scale", 50, 200, 1,
-        function() return DAT.db.scale or 100 end,
-        function(v) DAT.db.scale = v; DAT:RebuildUI() end)
+    AddSlider(ig, "Icon Zoom", 0, 30, 1,
+        function() return DAT.db.iconZoom or 8 end,
+        function(v) DAT.db.iconZoom = v; DAT:ApplyIconZoom() end)
+    AddSlider(ig, "Icon Brightness (%)", 0, 100, 1,
+        function() return DAT.db.iconBrightness or 35 end,
+        function(v) DAT.db.iconBrightness = v; DAT:ApplyVisuals() end)
+    AddSlider(ig, "Overlay Alpha (%)", 0, 90, 1,
+        function() return DAT.db.overlayAlpha or 45 end,
+        function(v) DAT.db.overlayAlpha = v; DAT:ApplyVisuals() end)
 
     local pg = AddGroup(c, "Position")
     local uiScale = UIParent:GetEffectiveScale()
@@ -162,14 +190,6 @@ local function BuildPageMain(c)
     AddCheckbox(pg, "Lock Position",
         function() return DAT.db.locked end,
         function(v) DAT.db.locked = v; DAT:RebuildUI() end, 1)
-
-    local ig = AddGroup(c, "Icon")
-    AddSlider(ig, "Icon Brightness (%)", 0, 100, 1,
-        function() return DAT.db.iconBrightness or 35 end,
-        function(v) DAT.db.iconBrightness = v; DAT:ApplyVisuals() end)
-    AddSlider(ig, "Overlay Alpha (%)", 0, 90, 1,
-        function() return DAT.db.overlayAlpha or 45 end,
-        function(v) DAT.db.overlayAlpha = v; DAT:ApplyVisuals() end)
 
     local dg = AddGroup(c, "Display")
     AddDropdown(dg, "Show Tracker", VISIBILITY_LIST, VISIBILITY_ORDER,
@@ -571,6 +591,7 @@ local function BuildConditionRow(parent, ruleIdx, condIdx, cond, isFirst)
         eb:SetCallback("OnEnterPressed", function(_, _, text)
             cond.threshold = tonumber(text) or 0
         end)
+        eb.editbox:SetFontObject(GameFontHighlightSmall)
         row:AddChild(eb)
     else
         local spacer = AceGUI:Create("Label")
@@ -583,8 +604,14 @@ local function BuildConditionRow(parent, ruleIdx, condIdx, cond, isFirst)
     if not isFirst then
         local delBtn = AceGUI:Create("Button")
         delBtn:SetText("X")
-        delBtn:SetWidth(28)
+        delBtn:SetWidth(24)
         delBtn:SetHeight(24)
+        delBtn.text:ClearAllPoints()
+        delBtn.text:SetPoint("TOPLEFT", 2, -1)
+        delBtn.text:SetPoint("BOTTOMRIGHT", -2, 1)
+        delBtn.text:SetJustifyH("CENTER")
+        delBtn.text:SetJustifyV("MIDDLE")
+        delBtn.alignoffset = 10
         delBtn:SetCallback("OnClick", function()
             local rule = DAT.db.announceRules[ruleIdx]
             table.remove(rule.conditions, condIdx)
@@ -631,10 +658,12 @@ local function BuildRuleCard(parent, ruleIdx, rule)
     local delRule = AceGUI:Create("Button")
     delRule:SetText("Delete")
     delRule:SetRelativeWidth(0.3)
+    delRule:SetHeight(24)
     delRule:SetCallback("OnClick", function()
         table.remove(DAT.db.announceRules, ruleIdx)
         if RefreshPage then RefreshPage("announce") end
     end)
+    delRule.alignoffset = 10
     header:AddChild(delRule)
 
     -- Condition rows
@@ -644,9 +673,10 @@ local function BuildRuleCard(parent, ruleIdx, rule)
 
     -- "+ Add Condition" (hidden for dominion rules)
     if not isDominion then
-        local spacer = AceGUI:Create("Label")
-        spacer:SetText(" ")
+        local spacer = AceGUI:Create("SimpleGroup")
+        spacer.noAutoHeight = true
         spacer:SetFullWidth(true)
+        spacer:SetHeight(4)
         card:AddChild(spacer)
 
         local addCondBtn = AceGUI:Create("Button")
@@ -667,6 +697,7 @@ local function BuildRuleCard(parent, ruleIdx, rule)
     msgEb:SetText(rule.msg or "")
     msgEb:SetFullWidth(true)
     msgEb:SetCallback("OnEnterPressed", function(_, _, text) rule.msg = text end)
+    msgEb.editbox:SetFontObject(ChatFontNormal)
     card:AddChild(msgEb)
 end
 
@@ -677,19 +708,31 @@ local function BuildPageAnnounce(c)
     local intro = AddGroup(c, "Announcement")
 
     local hint = AceGUI:Create("Label")
-    hint:SetText("Variables:  |cffffd700{count:hog}|r = HoG casts    |cffffd700{count:demon}|r = demons summoned")
+    hint:SetText("Tags:\n- |cffffd700{count:hog}|r: Hand of Gul'dan casts\n- |cffffd700{count:demon}|r: Demons summoned")
     hint:SetFullWidth(true)
-    hint:SetFontObject(GameFontHighlightSmall)
+    hint:SetFontObject(GameFontHighlight)
     intro:AddChild(hint)
 
+    local gap = AceGUI:Create("SimpleGroup")
+    gap.noAutoHeight = true
+    gap:SetFullWidth(true)
+    gap:SetHeight(6)
+    intro:AddChild(gap)
+
     local note = AceGUI:Create("Label")
-    note:SetText("|cffaaaaaaNote: SAY and YELL only work inside instances.|r")
+    note:SetText("|cffaaaaaaNote: Say and Yell only work inside instances.|r")
     note:SetFullWidth(true)
-    note:SetFontObject(GameFontHighlightSmall)
+    note:SetFontObject(GameFontHighlight)
     intro:AddChild(note)
 
+    local gap2 = AceGUI:Create("SimpleGroup")
+    gap2.noAutoHeight = true
+    gap2:SetFullWidth(true)
+    gap2:SetHeight(8)
+    intro:AddChild(gap2)
+
     local addBtn = AceGUI:Create("Button")
-    addBtn:SetText("+ Add Rule")
+    addBtn:SetText("+ Add Announcement")
     addBtn:SetRelativeWidth(0.5)
     addBtn:SetCallback("OnClick", function()
         local rules = DAT.db.announceRules
@@ -707,20 +750,13 @@ local function BuildPageAnnounce(c)
     local rules = DAT.db.announceRules or {}
     if #rules == 0 then
         local empty = AceGUI:Create("Label")
-        empty:SetText("|cff888888No rules configured. Click '+ Add Rule' above.|r")
+        empty:SetText("|cff888888No rules configured. Click '+ Add Announcement' above.|r")
         empty:SetFullWidth(true)
         c:AddChild(empty)
     else
         for i, rule in ipairs(rules) do
             BuildRuleCard(c, i, rule)
         end
-    end
-end
-
-function DAT.Config:OpenAnnounceEditor()
-    self:Open()
-    if _currentTree then
-        _currentTree:SelectByValue("announce")
     end
 end
 
@@ -736,8 +772,8 @@ local PAGES = {
     { value = "announce", text = "Announcement", build = BuildPageAnnounce },
 }
 
-local _configFrame
 local _configStatus = {}
+local _scrollStatus = {}
 
 local function BuildTree()
     local t = {}
@@ -755,6 +791,8 @@ local function SelectGroup(container, _, value)
             scroll:SetLayout("Flow")
             scroll:SetFullWidth(true)
             scroll:SetFullHeight(true)
+            _scrollStatus[value] = _scrollStatus[value] or {}
+            scroll:SetStatusTable(_scrollStatus[value])
             container:AddChild(scroll)
             p.build(scroll)
             scroll:DoLayout()
@@ -804,6 +842,10 @@ function DAT.Config:Open()
         _currentTree = nil
     end)
     _configFrame = f
+
+    if f.frame then
+        f.frame:SetScale((DAT.db.guiScale or 100) / 100)
+    end
 
     local tree = AceGUI:Create("TreeGroup")
     tree:SetLayout("Fill")
