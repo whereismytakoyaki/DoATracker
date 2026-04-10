@@ -823,13 +823,16 @@ SlashCmdList["DOATRACKER"] = function(msg)
     msg = strtrim(msg or ""):lower()
     if msg == "announce" then
         DAT.Config:OpenAnnounceEditor()
+    elseif msg == "close" then
+        if DAT.Config and DAT.Config.Close then DAT.Config:Close() end
+    elseif msg == "help" or msg == "?" then
+        print("|cff9482c9[DoA Tracker]|r")
+        print("  |cffffd700/doat|r           — open settings")
+        print("  |cffffd700/doat announce|r  — open announce editor")
+        print("  |cffffd700/doat close|r     — close the settings window")
     else
-        if DAT.Config and DAT.Config.mainCat and Settings and Settings.OpenToCategory then
-            Settings.OpenToCategory(DAT.Config.mainCat:GetID())
-        else
-            print("|cff9482c9[DoA Tracker]|r v1.0.4")
-            print("  |cffffd700/doat|r           — open settings")
-            print("  |cffffd700/doat announce|r  — open announce editor")
+        if DAT.Config and DAT.Config.Open then
+            DAT.Config:Open()
         end
     end
 end

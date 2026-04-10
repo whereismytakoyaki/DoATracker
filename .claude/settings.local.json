@@ -5,7 +5,10 @@
       "Bash(lua -e \"loadfile\\('Config.lua'\\)\")",
       "WebFetch(domain:raw.githubusercontent.com)",
       "WebFetch(domain:repos.wowace.com)",
-      "WebFetch(domain:github.com)"
+      "WebFetch(domain:github.com)",
+      "Bash(cat _new_top.lua _announce_editor.lua _new_bottom.lua)",
+      "Bash(mv Config.lua.new Config.lua)",
+      "Bash(rm _new_top.lua _new_bottom.lua _announce_editor.lua)"
     ]
   }
 }
