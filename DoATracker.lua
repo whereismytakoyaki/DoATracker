@@ -149,8 +149,20 @@ function DAT:Initialize()
     DoATrackerDB = DoATrackerDB or {}
     self.db = DoATrackerDB
 
-    -- Migrate old separate R/G/B channel fields → color tables
+    -- Migrate old scaled posX/posY → UIParent coord space.
+    -- Old format stored GetLeft()*effectiveScale; new format stores raw
+    -- GetLeft(), since frame scale is 1 and parent is UIParent (no
+    -- conversion needed). Scale-round-tripping could drift between
+    -- sessions when effectiveScale wasn't stable at login time.
     local db = self.db
+    if db.posX and db.posY and not db.posVer then
+        local s = UIParent:GetEffectiveScale()
+        db.posX = db.posX / s
+        db.posY = db.posY / s
+    end
+    db.posVer = 2
+
+    -- Migrate old separate R/G/B channel fields → color tables
     local function Migrate(rk, gk, bk, tk)
         if db[rk] ~= nil then
             if not db[tk] then
@@ -281,9 +293,11 @@ function DAT:CreateUI()
         local x = f:GetLeft()
         local y = f:GetBottom()
         if x and y then
-            local s = f:GetEffectiveScale()
-            DAT.db.posX = x * s
-            DAT.db.posY = y * s
+            DAT.db.posX = x
+            DAT.db.posY = y
+            if DAT.Config and DAT.Config.UpdatePositionSliders then
+                DAT.Config:UpdatePositionSliders()
+            end
         end
     end)
 
@@ -478,8 +492,7 @@ function DAT:ApplyFramePosition()
     local db = self.db
     frame:ClearAllPoints()
     if db.posX and db.posY then
-        local s = frame:GetEffectiveScale()
-        frame:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", db.posX / s, db.posY / s)
+        frame:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", db.posX, db.posY)
     else
         frame:SetPoint("CENTER", UIParent, "CENTER", 300, 200)
     end
@@ -800,7 +813,7 @@ end
 eventHandlers["PLAYER_LOGIN"] = function()
     DAT:CreateUI()
     DAT:UpdateVisibility()
-    print("|cff9482c9[DoA Tracker]|r v1.0.5 loaded. Type |cffffd700/doat|r to open settings.")
+    print("|cff9482c9[DoA Tracker]|r v1.0.6 loaded. Type |cffffd700/doat|r to open settings.")
 end
 
 eventHandlers["PLAYER_REGEN_DISABLED"] = function()

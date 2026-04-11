@@ -7,6 +7,10 @@ local AceGUI = LibStub and LibStub("AceGUI-3.0", true)
 local _currentTree
 local _configFrame
 local RefreshPage
+-- Live refs to the Main page position sliders so drag-to-move can push
+-- the new value back into the open config. Cleared in SelectGroup before
+-- ReleaseChildren so we never call methods on a pooled widget.
+local _posXSlider, _posYSlider
 
 ------------------------------------------------------------
 -- AceGUI widget helpers (UnhaltedUnitFrames-style)
@@ -178,31 +182,47 @@ local function BuildPageMain(c)
         function(v) DAT.db.overlayAlpha = v; DAT:ApplyVisuals() end)
 
     local pg = AddGroup(c, "Position")
-    local uiScale = UIParent:GetEffectiveScale()
-    local maxX = math.floor(GetScreenWidth()  * uiScale + 0.5)
-    local maxY = math.floor(GetScreenHeight() * uiScale + 0.5)
-    AddSlider(pg, "Position X", 0, maxX, 1,
+    local maxX = math.floor(GetScreenWidth()  + 0.5)
+    local maxY = math.floor(GetScreenHeight() + 0.5)
+    _posXSlider = AddSlider(pg, "Position X", 0, maxX, 1,
         function() return math.floor((DAT.db.posX or 0) + 0.5) end,
         function(v) DAT.db.posX = v; DAT:ApplyFramePosition() end)
-    AddSlider(pg, "Position Y", 0, maxY, 1,
+    _posYSlider = AddSlider(pg, "Position Y", 0, maxY, 1,
         function() return math.floor((DAT.db.posY or 0) + 0.5) end,
         function(v) DAT.db.posY = v; DAT:ApplyFramePosition() end)
+    _posXSlider:SetDisabled(DAT.db.locked and true or false)
+    _posYSlider:SetDisabled(DAT.db.locked and true or false)
     AddCheckbox(pg, "Lock Position",
         function() return DAT.db.locked end,
-        function(v) DAT.db.locked = v; DAT:RebuildUI() end, 1)
+        function(v)
+            DAT.db.locked = v
+            DAT:RebuildUI()
+            if _posXSlider then _posXSlider:SetDisabled(v and true or false) end
+            if _posYSlider then _posYSlider:SetDisabled(v and true or false) end
+        end, 1)
 
     local dg = AddGroup(c, "Display")
     AddDropdown(dg, "Show Tracker", VISIBILITY_LIST, VISIBILITY_ORDER,
         function() return DAT.db.visibilityMode or "always" end,
         function(v) DAT.db.visibilityMode = v; DAT:UpdateVisibility() end)
+    local hideGroup = {}
     AddCheckbox(dg, "Hide When No Buff",
         function() return DAT.db.hideWhenNoBuff or false end,
-        function(v) DAT.db.hideWhenNoBuff = v; DAT:UpdateVisibility() end,
+        function(v)
+            DAT.db.hideWhenNoBuff = v
+            DAT:UpdateVisibility()
+            local dis = not v
+            for _, w in ipairs(hideGroup) do w:SetDisabled(dis) end
+        end,
         0.5)
-    AddSlider(dg, "Hide Delay (sec)", 0, 30, 1,
+    hideGroup[#hideGroup+1] = AddSlider(dg, "Hide Delay (sec)", 0, 30, 1,
         function() return DAT.db.hideDelaySec or 0 end,
         function(v) DAT.db.hideDelaySec = v end,
         0.5)
+    do
+        local dis = not DAT.db.hideWhenNoBuff
+        for _, w in ipairs(hideGroup) do w:SetDisabled(dis) end
+    end
     AddSlider(dg, "Count Reset Delay (sec)", 0, 60, 1,
         function() return DAT.db.countLingerSec or 0 end,
         function(v) DAT.db.countLingerSec = v end,
@@ -232,21 +252,31 @@ local function BuildPageFonts(c)
     AddDropdown(fg, "Outline", OUTLINE_LIST, OUTLINE_ORDER,
         function() return DAT.db.fontFlags or "OUTLINE" end,
         function(v) DAT.db.fontFlags = v; DAT:RebuildUI() end)
+    local shadowGroup = {}
     AddCheckbox(fg, "Shadow",
         function() return DAT.db.shadowEnabled or false end,
-        function(v) DAT.db.shadowEnabled = v; DAT:ApplyShadow() end, 0.5)
-    AddSlider(fg, "Shadow X Offset", -5, 5, 1,
+        function(v)
+            DAT.db.shadowEnabled = v
+            DAT:ApplyShadow()
+            local dis = not v
+            for _, w in ipairs(shadowGroup) do w:SetDisabled(dis) end
+        end, 0.5)
+    shadowGroup[#shadowGroup+1] = AddSlider(fg, "Shadow X Offset", -5, 5, 1,
         function() return DAT.db.shadowOffsetX or 1 end,
         function(v) DAT.db.shadowOffsetX = v; DAT:ApplyShadow() end)
-    AddSlider(fg, "Shadow Y Offset", -5, 5, 1,
+    shadowGroup[#shadowGroup+1] = AddSlider(fg, "Shadow Y Offset", -5, 5, 1,
         function() return DAT.db.shadowOffsetY or -1 end,
         function(v) DAT.db.shadowOffsetY = v; DAT:ApplyShadow() end)
-    AddColorPicker(fg, "Shadow Color",
+    shadowGroup[#shadowGroup+1] = AddColorPicker(fg, "Shadow Color",
         function() return DAT.db.shadowColor or { r=0, g=0, b=0 } end,
         function(r, g, b)
             DAT.db.shadowColor = { r=r, g=g, b=b }
             DAT:ApplyShadow()
         end)
+    do
+        local dis = not DAT.db.shadowEnabled
+        for _, w in ipairs(shadowGroup) do w:SetDisabled(dis) end
+    end
 
     local cg = AddGroup(c, "Count Text")
     AddSlider(cg, "Font Size", 8, 60, 1,
@@ -373,18 +403,27 @@ local function BuildPageColors(c)
             DAT.db.timerColor = { r=r, g=g, b=b }
             DAT:ApplyVisuals()
         end)
+    local warnGroup = {}
     AddCheckbox(tg, "Enable Timer Warning Color",
         function() return DAT.db.timerWarnEnabled ~= false end,
-        function(v) DAT.db.timerWarnEnabled = v end, 1,
+        function(v)
+            DAT.db.timerWarnEnabled = v
+            local dis = not v
+            for _, w in ipairs(warnGroup) do w:SetDisabled(dis) end
+        end, 1,
         "Change the timer text color when time is running low.")
-    AddSlider(tg, "Warn When <= (sec)", 1, 20, 1,
+    warnGroup[#warnGroup+1] = AddSlider(tg, "Warn When <= (sec)", 1, 20, 1,
         function() return DAT.db.timerWarnThreshold or 5 end,
         function(v) DAT.db.timerWarnThreshold = v end)
-    AddColorPicker(tg, "Timer Warning",
+    warnGroup[#warnGroup+1] = AddColorPicker(tg, "Timer Warning",
         function() return DAT.db.timerWarnColor or { r=1.0, g=0.2, b=0.2 } end,
         function(r, g, b)
             DAT.db.timerWarnColor = { r=r, g=g, b=b }
         end)
+    do
+        local dis = (DAT.db.timerWarnEnabled == false)
+        for _, w in ipairs(warnGroup) do w:SetDisabled(dis) end
+    end
 end
 
 ------------------------------------------------------------
@@ -392,10 +431,16 @@ end
 ------------------------------------------------------------
 local function BuildPageGlow(c)
     local g = AddGroup(c, "Glow")
+    local glowGroup = {}
     AddCheckbox(g, "Enable Glow",
         function() return DAT.db.glowEnabled or false end,
-        function(v) DAT.db.glowEnabled = v; DAT:ApplyGlow(DAT._dominionActive) end, 1)
-    AddDropdown(g, "Glow Type", GLOW_LIST, GLOW_ORDER,
+        function(v)
+            DAT.db.glowEnabled = v
+            DAT:ApplyGlow(DAT._dominionActive)
+            local dis = not v
+            for _, w in ipairs(glowGroup) do w:SetDisabled(dis) end
+        end, 1)
+    glowGroup[#glowGroup+1] = AddDropdown(g, "Glow Type", GLOW_LIST, GLOW_ORDER,
         function() return DAT.db.glowType or "proc" end,
         function(v)
             local prev = DAT.db.glowType
@@ -405,7 +450,7 @@ local function BuildPageGlow(c)
                 RefreshPage("glow")
             end
         end)
-    AddColorPicker(g, "Glow Color",
+    glowGroup[#glowGroup+1] = AddColorPicker(g, "Glow Color",
         function() return DAT.db.glowColor or { r=1.0, g=0.84, b=0.0 } end,
         function(r, g, b)
             DAT.db.glowColor = { r=r, g=g, b=b }
@@ -414,24 +459,29 @@ local function BuildPageGlow(c)
 
     if DAT.db.glowType == "pixel" then
         local pg = AddGroup(c, "Pixel Glow Options")
-        AddSlider(pg, "Lines", 1, 20, 1,
+        glowGroup[#glowGroup+1] = AddSlider(pg, "Lines", 1, 20, 1,
             function() return DAT.db.glowPixelN or 8 end,
             function(v) DAT.db.glowPixelN = v; DAT:ApplyGlow(DAT._dominionActive) end)
-        AddSlider(pg, "Frequency", 0.01, 2, 0.01,
+        glowGroup[#glowGroup+1] = AddSlider(pg, "Frequency", 0.01, 2, 0.01,
             function() return DAT.db.glowPixelFreq or 0.25 end,
             function(v) DAT.db.glowPixelFreq = v; DAT:ApplyGlow(DAT._dominionActive) end)
-        AddSlider(pg, "Length (0=auto)", 0, 20, 1,
+        glowGroup[#glowGroup+1] = AddSlider(pg, "Length (0=auto)", 0, 20, 1,
             function() return DAT.db.glowPixelLength or 3 end,
             function(v) DAT.db.glowPixelLength = v; DAT:ApplyGlow(DAT._dominionActive) end)
-        AddSlider(pg, "Thickness", 1, 10, 1,
+        glowGroup[#glowGroup+1] = AddSlider(pg, "Thickness", 1, 10, 1,
             function() return DAT.db.glowPixelThick or 2 end,
             function(v) DAT.db.glowPixelThick = v; DAT:ApplyGlow(DAT._dominionActive) end)
-        AddSlider(pg, "X Offset", -20, 20, 1,
+        glowGroup[#glowGroup+1] = AddSlider(pg, "X Offset", -20, 20, 1,
             function() return DAT.db.glowPixelXOffset or 0 end,
             function(v) DAT.db.glowPixelXOffset = v; DAT:ApplyGlow(DAT._dominionActive) end)
-        AddSlider(pg, "Y Offset", -20, 20, 1,
+        glowGroup[#glowGroup+1] = AddSlider(pg, "Y Offset", -20, 20, 1,
             function() return DAT.db.glowPixelYOffset or 0 end,
             function(v) DAT.db.glowPixelYOffset = v; DAT:ApplyGlow(DAT._dominionActive) end)
+    end
+
+    do
+        local dis = not DAT.db.glowEnabled
+        for _, w in ipairs(glowGroup) do w:SetDisabled(dis) end
     end
 end
 
@@ -524,7 +574,9 @@ end
 ------------------------------------------------------------
 -- Announce rule condition row
 ------------------------------------------------------------
-local function BuildConditionRow(parent, ruleIdx, condIdx, cond, isFirst)
+local function BuildConditionRow(parent, ruleIdx, condIdx, cond, isFirst, collect)
+    local function track(w) if collect then collect[#collect+1] = w end end
+
     local row = AceGUI:Create("SimpleGroup")
     row:SetLayout("Flow")
     row:SetFullWidth(true)
@@ -545,6 +597,7 @@ local function BuildConditionRow(parent, ruleIdx, condIdx, cond, isFirst)
         logicDd:SetRelativeWidth(0.12)
         logicDd:SetCallback("OnValueChanged", function(_, _, key) cond.logic = key end)
         row:AddChild(logicDd)
+        track(logicDd)
     end
 
     -- Condition type dropdown
@@ -571,6 +624,7 @@ local function BuildConditionRow(parent, ruleIdx, condIdx, cond, isFirst)
         if RefreshPage then RefreshPage("announce") end
     end)
     row:AddChild(condDd)
+    track(condDd)
 
     -- Operator dropdown
     local opList, opOrder = OperatorListForCondition(cond.condition or "dominion")
@@ -581,6 +635,7 @@ local function BuildConditionRow(parent, ruleIdx, condIdx, cond, isFirst)
     opDd:SetRelativeWidth(0.2)
     opDd:SetCallback("OnValueChanged", function(_, _, key) cond.operator = key end)
     row:AddChild(opDd)
+    track(opDd)
 
     -- Threshold editbox (hidden for dominion)
     if ConditionNeedsThreshold(cond.condition or "dominion") then
@@ -593,6 +648,7 @@ local function BuildConditionRow(parent, ruleIdx, condIdx, cond, isFirst)
         end)
         eb.editbox:SetFontObject(GameFontHighlightSmall)
         row:AddChild(eb)
+        track(eb)
     else
         local spacer = AceGUI:Create("Label")
         spacer:SetText(" ")
@@ -618,6 +674,7 @@ local function BuildConditionRow(parent, ruleIdx, condIdx, cond, isFirst)
             if RefreshPage then RefreshPage("announce") end
         end)
         row:AddChild(delBtn)
+        track(delBtn)
     end
 end
 
@@ -634,6 +691,11 @@ local function BuildRuleCard(parent, ruleIdx, rule)
     local conds = rule.conditions or {}
     local isDominion = (#conds > 0 and conds[1].condition == "dominion")
 
+    -- Widgets that get disabled when the rule's Enabled checkbox is off.
+    -- Delete button is intentionally excluded so disabled rules can still
+    -- be removed.
+    local ruleGroup = {}
+
     -- Header row: enable / channel / delete
     local header = AceGUI:Create("SimpleGroup")
     header:SetLayout("Flow")
@@ -644,7 +706,11 @@ local function BuildRuleCard(parent, ruleIdx, rule)
     cb:SetLabel("Enabled")
     cb:SetValue(rule.enabled and true or false)
     cb:SetRelativeWidth(0.3)
-    cb:SetCallback("OnValueChanged", function(_, _, v) rule.enabled = v end)
+    cb:SetCallback("OnValueChanged", function(_, _, v)
+        rule.enabled = v
+        local dis = not v
+        for _, w in ipairs(ruleGroup) do w:SetDisabled(dis) end
+    end)
     header:AddChild(cb)
 
     local chanDd = AceGUI:Create("Dropdown")
@@ -654,6 +720,7 @@ local function BuildRuleCard(parent, ruleIdx, rule)
     chanDd:SetRelativeWidth(0.4)
     chanDd:SetCallback("OnValueChanged", function(_, _, key) rule.channel = key end)
     header:AddChild(chanDd)
+    ruleGroup[#ruleGroup+1] = chanDd
 
     local delRule = AceGUI:Create("Button")
     delRule:SetText("Delete")
@@ -668,7 +735,7 @@ local function BuildRuleCard(parent, ruleIdx, rule)
 
     -- Condition rows
     for ci, cond in ipairs(conds) do
-        BuildConditionRow(card, ruleIdx, ci, cond, ci == 1)
+        BuildConditionRow(card, ruleIdx, ci, cond, ci == 1, ruleGroup)
     end
 
     -- "+ Add Condition" (hidden for dominion rules)
@@ -689,6 +756,7 @@ local function BuildRuleCard(parent, ruleIdx, rule)
             if RefreshPage then RefreshPage("announce") end
         end)
         card:AddChild(addCondBtn)
+        ruleGroup[#ruleGroup+1] = addCondBtn
     end
 
     -- Message editbox (full width)
@@ -699,6 +767,13 @@ local function BuildRuleCard(parent, ruleIdx, rule)
     msgEb:SetCallback("OnEnterPressed", function(_, _, text) rule.msg = text end)
     msgEb.editbox:SetFontObject(ChatFontNormal)
     card:AddChild(msgEb)
+    ruleGroup[#ruleGroup+1] = msgEb
+
+    -- Apply initial disabled state
+    do
+        local dis = not rule.enabled
+        for _, w in ipairs(ruleGroup) do w:SetDisabled(dis) end
+    end
 end
 
 ------------------------------------------------------------
@@ -784,6 +859,7 @@ local function BuildTree()
 end
 
 local function SelectGroup(container, _, value)
+    _posXSlider, _posYSlider = nil, nil
     container:ReleaseChildren()
     for _, p in ipairs(PAGES) do
         if p.value == value then
@@ -840,6 +916,7 @@ function DAT.Config:Open()
         AceGUI:Release(widget)
         _configFrame = nil
         _currentTree = nil
+        _posXSlider, _posYSlider = nil, nil
     end)
     _configFrame = f
 
@@ -863,6 +940,19 @@ end
 
 function DAT.Config:Close()
     if _configFrame then _configFrame:Hide() end
+end
+
+-- Push the live posX/posY back into the open Main page sliders. Called
+-- from the frame's OnDragStop so the UI reflects the new position while
+-- the config window is open. No-op if the user isn't currently viewing
+-- the Main page (refs are cleared in SelectGroup / OnClose).
+function DAT.Config:UpdatePositionSliders()
+    if _posXSlider then
+        _posXSlider:SetValue(math.floor((DAT.db.posX or 0) + 0.5))
+    end
+    if _posYSlider then
+        _posYSlider:SetValue(math.floor((DAT.db.posY or 0) + 0.5))
+    end
 end
 
 -- Kept for backwards-compatibility; Blizzard Settings panel removed.
