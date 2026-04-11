@@ -74,7 +74,12 @@ local function AddColorPicker(parent, label, getFn, setFn, width)
     local c = getFn() or { r = 1, g = 1, b = 1 }
     cp:SetColor(c.r, c.g, c.b)
     cp:SetRelativeWidth(width or 0.5)
-    cp:SetCallback("OnValueConfirmed", function(_, _, r, g, b) setFn(r, g, b) end)
+    -- The AceGUI ColorPicker widget only fires OnValueConfirmed when HasAlpha
+    -- is true (or on Cancel). For non-alpha swatches we must listen on
+    -- OnValueChanged so picks are actually saved when the user clicks OK.
+    local function handle(_, _, r, g, b) setFn(r, g, b) end
+    cp:SetCallback("OnValueChanged",   handle)
+    cp:SetCallback("OnValueConfirmed", handle)
     parent:AddChild(cp)
     return cp
 end
@@ -354,13 +359,13 @@ local function BuildPageBorder(c)
         function() return DAT.db.borderColor or { r=0.1, g=0.9, b=0.1 } end,
         function(r, g, b)
             DAT.db.borderColor = { r=r, g=g, b=b }
-            DAT:ApplyBorder()
+            DAT:ApplyBorderColor()
         end)
     AddColorPicker(cg, "Inactive Border",
         function() return DAT.db.inactBorderColor or { r=0.15, g=0.15, b=0.15 } end,
         function(r, g, b)
             DAT.db.inactBorderColor = { r=r, g=g, b=b }
-            DAT:ApplyBorder()
+            DAT:ApplyBorderColor()
         end)
 end
 

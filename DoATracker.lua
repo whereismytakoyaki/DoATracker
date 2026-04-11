@@ -90,14 +90,15 @@ DAT.DEFAULTS = {
 ------------------------------------------------------------
 -- State
 ------------------------------------------------------------
-local dominionActive  = false
-local hogCount        = 0
-local dominionTimer   = nil
-local dominionEndTime = 0
-local updateTicker    = nil
-local lingerTimer     = nil
-local hideDelayTimer  = nil
-DAT._dominionActive   = false   -- exposed for Config.lua
+local dominionActive   = false
+local hogCount         = 0
+local dominionTimer    = nil
+local dominionEndTime  = 0
+local updateTicker     = nil
+local lingerTimer      = nil
+local hideDelayTimer   = nil
+local _timerInWarnState = false   -- tracked so UpdateCountdown only recolors on transition
+DAT._dominionActive    = false    -- exposed for Config.lua
 
 ------------------------------------------------------------
 -- UI handles
@@ -441,6 +442,21 @@ function DAT:ApplyBorder()
 end
 
 ------------------------------------------------------------
+-- DAT:ApplyBorderColor()
+-- Apply only the border tint, without rebuilding the backdrop. Color-picker
+-- callbacks now fire OnValueChanged rapidly while the user drags, and
+-- repeatedly calling SetBackdrop was leaving the edge-texture state wedged
+-- so SetBackdropBorderColor wouldn't stick.
+------------------------------------------------------------
+function DAT:ApplyBorderColor()
+    if not borderFrame then return end
+    local db = self.db
+    if not db.borderPath then return end
+    local c = dominionActive and db.borderColor or db.inactBorderColor
+    borderFrame:SetBackdropBorderColor(c.r, c.g, c.b, 1)
+end
+
+------------------------------------------------------------
 -- DAT:ApplyIconZoom()
 ------------------------------------------------------------
 function DAT:ApplyIconZoom()
@@ -480,8 +496,17 @@ function DAT:ApplyVisuals()
     end
 
     darkOverlay:SetColorTexture(0, 0, 0, db.overlayAlpha / 100)
-    local tc = db.timerColor
+
+    -- Pick the correct timer color based on current warn state, so live
+    -- config changes to timerColor / timerWarnColor reflect immediately
+    -- (the UpdateCountdown tick only recolors on warn transitions).
+    local rem    = dominionActive and (dominionEndTime - GetTime()) or 0
+    local inWarn = dominionActive and db.timerWarnEnabled ~= false
+                   and rem > 0 and rem <= (db.timerWarnThreshold or 5)
+    local tc = inWarn and (db.timerWarnColor or { r = 1.0, g = 0.2, b = 0.2 })
+                      or  (db.timerColor     or { r = 1.0, g = 0.82, b = 0.0 })
     timerText:SetTextColor(tc.r, tc.g, tc.b)
+    _timerInWarnState = inWarn
 end
 
 ------------------------------------------------------------
@@ -634,8 +659,6 @@ end
 ------------------------------------------------------------
 -- Countdown
 ------------------------------------------------------------
-local _timerInWarnState = false   -- track to avoid redundant SetTextColor
-
 local function UpdateCountdown()
     if not timerText then return end
     local rem = dominionEndTime - GetTime()
@@ -813,7 +836,7 @@ end
 eventHandlers["PLAYER_LOGIN"] = function()
     DAT:CreateUI()
     DAT:UpdateVisibility()
-    print("|cff9482c9[DoA Tracker]|r v1.0.6 loaded. Type |cffffd700/doat|r to open settings.")
+    print("|cff9482c9[DoA Tracker]|r v1.0.6-fix-1 loaded. Type |cffffd700/doat|r to open settings.")
 end
 
 eventHandlers["PLAYER_REGEN_DISABLED"] = function()
