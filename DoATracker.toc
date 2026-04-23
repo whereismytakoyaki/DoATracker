@@ -2,7 +2,7 @@
 ## Title: DoA Tracker
 ## Author: whereismytakoyaki
 ## Notes: A handy addon for Demonology Warlock that tracks Hand of Gul'dan casts during Dominion of Argus
-## Version: 1.0.6-fix-1
+## Version: 1.0.7
 ## SavedVariables: DoATrackerDB
 
 libs\LibStub\LibStub.lua
@@ -10,6 +10,10 @@ libs\CallbackHandler-1.0\CallbackHandler-1.0.lua
 libs\LibSharedMedia-3.0\LibSharedMedia-3.0.lua
 libs\LibCustomGlow-1.0\LibCustomGlow-1.0.lua
 libs\AceGUI-3.0\AceGUI-3.0.xml
+
+Locales\Locales.lua
+Locales\enUS.lua
+Locales\zhCN.lua
 
 Media.lua
 DoATracker.lua

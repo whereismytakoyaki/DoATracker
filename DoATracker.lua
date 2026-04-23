@@ -1,5 +1,11 @@
 DAT = DAT or {}
 
+-- L is applied by LoadLocale() inside Initialize(). Before that point
+-- (module load time) L falls back to keys, which is fine for the few
+-- constants below — localized strings here are only read from within
+-- functions that run after Initialize.
+local L = DAT.L or setmetatable({}, { __index = function(_, k) return k end })
+
 ------------------------------------------------------------
 -- Upvalue hot globals
 ------------------------------------------------------------
@@ -68,7 +74,7 @@ DAT.DEFAULTS = {
     activeDemonColor = { r = 1.0,  g = 0.84, b = 0.0  },
     inactDemonColor  = { r = 0.55, g = 0.55, b = 0.55 },
     iconBrightness   = 35,
-    overlayAlpha     = 45,
+    iconAlpha        = 100,
     glowEnabled      = false,
     glowType         = "proc",
     glowColor        = { r = 1.0,  g = 0.84, b = 0.0  },
@@ -85,6 +91,8 @@ DAT.DEFAULTS = {
     visibilityMode   = "always",
     hideWhenNoBuff   = false,
     hideDelaySec     = 0,
+    -- locale override ("auto" = follow client); requires /reload to apply
+    locale           = "auto",
 }
 
 ------------------------------------------------------------
@@ -105,7 +113,6 @@ DAT._dominionActive    = false    -- exposed for Config.lua
 ------------------------------------------------------------
 local frame       = nil
 local iconTex     = nil
-local darkOverlay = nil
 local borderFrame = nil
 local glowFrame   = nil
 local countText   = nil
@@ -150,6 +157,11 @@ function DAT:Initialize()
     DoATrackerDB = DoATrackerDB or {}
     self.db = DoATrackerDB
 
+    -- Apply locale now that SavedVariables are available. This populates
+    -- DAT.L with the chosen translation table and fires locale hooks that
+    -- rebuild Config.lua's cached option lists.
+    if DAT.LoadLocale then DAT.LoadLocale() end
+
     -- Migrate old scaled posX/posY → UIParent coord space.
     -- Old format stored GetLeft()*effectiveScale; new format stores raw
     -- GetLeft(), since frame scale is 1 and parent is UIParent (no
@@ -187,12 +199,12 @@ function DAT:Initialize()
             local en = db.announceEnabled ~= false
             db.announceRules = {
                 { enabled = en, channel = ch,
-                  msg = db.startMsg or "Dominion of Argus active!",
+                  msg = db.startMsg or L["Dominion of Argus active!"],
                   conditions = {
                       { condition = "dominion", operator = "start", threshold = 0 },
                   }},
                 { enabled = en, channel = ch,
-                  msg = db.endMsg or "Dominion ended — HoG: {count:hog}  Demons: {count:demon}",
+                  msg = db.endMsg or L["Dominion ended — HoG: {count:hog}  Demons: {count:demon}"],
                   conditions = {
                       { condition = "dominion", operator = "end", threshold = 0 },
                   }},
@@ -257,12 +269,12 @@ function DAT:Initialize()
     if not self.db.announceRules then
         self.db.announceRules = {
             { enabled = true, channel = "SYSTEM",
-              msg = "Dominion of Argus active!",
+              msg = L["Dominion of Argus active!"],
               conditions = {
                   { condition = "dominion", operator = "start", threshold = 0 },
               }},
             { enabled = true, channel = "SYSTEM",
-              msg = "Dominion ended — HoG: {count:hog}  Demons: {count:demon}",
+              msg = L["Dominion ended — HoG: {count:hog}  Demons: {count:demon}"],
               conditions = {
                   { condition = "dominion", operator = "end", threshold = 0 },
               }},
@@ -312,12 +324,6 @@ function DAT:CreateUI()
     if _si and _si.iconID then
         iconTex:SetTexture(_si.iconID)
     end
-
-    -- Dark overlay
-    darkOverlay = frame:CreateTexture(nil, "BORDER")
-    darkOverlay:SetSize(sz, sz)
-    darkOverlay:SetPoint("TOP", frame, "TOP", 0, 0)
-    darkOverlay:SetColorTexture(0, 0, 0, db.overlayAlpha / 100)
 
     -- Border frame (backdrop only — keep isolated from LibCustomGlow, which
     -- attaches child overlays to its target and corrupts BackdropTemplate's
@@ -379,10 +385,6 @@ function DAT:RebuildUI()
     iconTex:SetPoint("TOP", frame, "TOP", 0, 0)
     local z = (db.iconZoom or 8) / 100
     iconTex:SetTexCoord(z, 1 - z, z, 1 - z)
-
-    darkOverlay:SetSize(sz, sz)
-    darkOverlay:ClearAllPoints()
-    darkOverlay:SetPoint("TOP", frame, "TOP", 0, 0)
 
     local bo = db.borderOffset or 0
     borderFrame:ClearAllPoints()
@@ -495,7 +497,7 @@ function DAT:ApplyVisuals()
         end
     end
 
-    darkOverlay:SetColorTexture(0, 0, 0, db.overlayAlpha / 100)
+    iconTex:SetAlpha((db.iconAlpha or 100) / 100)
 
     -- Pick the correct timer color based on current warn state, so live
     -- config changes to timerColor / timerWarnColor reflect immediately
@@ -836,7 +838,7 @@ end
 eventHandlers["PLAYER_LOGIN"] = function()
     DAT:CreateUI()
     DAT:UpdateVisibility()
-    print("|cff9482c9[DoA Tracker]|r v1.0.6-fix-1 loaded. Type |cffffd700/doat|r to open settings.")
+    print("|cff9482c9[DoA Tracker]|r v1.0.7 " .. L["loaded. Type"] .. " |cffffd700/doat|r " .. L["to open settings."])
 end
 
 eventHandlers["PLAYER_REGEN_DISABLED"] = function()

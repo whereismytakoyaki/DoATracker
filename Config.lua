@@ -1,7 +1,21 @@
 DAT        = DAT or {}
 DAT.Config = DAT.Config or {}
 
+-- L is populated via the locale hook once LoadLocale() runs from
+-- Initialize() (SavedVariables are not yet restored at Lua load time).
+local L = DAT.L
+
 local AceGUI = LibStub and LibStub("AceGUI-3.0", true)
+
+StaticPopupDialogs["DOATRACKER_LOCALE_RELOAD"] = {
+    -- text / button1 / button2 are filled in by RebuildLocalizedLists
+    -- once the locale table has been applied.
+    OnAccept       = function() ReloadUI() end,
+    timeout        = 0,
+    whileDead      = true,
+    hideOnEscape   = true,
+    preferredIndex = 3,
+}
 
 -- forward declarations (assigned in DAT.Config:Open / near SelectGroup)
 local _currentTree
@@ -87,43 +101,13 @@ end
 ------------------------------------------------------------
 -- Shared option lists
 ------------------------------------------------------------
-local ANCHOR_LIST = {
-    CENTER = "Center",
-    TOP    = "Top",
-    BOTTOM = "Bottom",
-    LEFT   = "Left",
-    RIGHT  = "Right",
-}
-local ANCHOR_ORDER = { "CENTER", "TOP", "BOTTOM", "LEFT", "RIGHT" }
-
-local VISIBILITY_LIST = {
-    always   = "Always",
-    combat   = "In Combat Only",
-    nocombat = "Out of Combat Only",
-    never    = "Never",
-}
-local VISIBILITY_ORDER = { "always", "combat", "nocombat", "never" }
-
-local OUTLINE_LIST = {
-    ["OUTLINE"]                  = "Outline",
-    ["THICKOUTLINE"]             = "Thick Outline",
-    ["MONOCHROME"]               = "Monochrome",
-    ["OUTLINE, MONOCHROME"]      = "Outline + Monochrome",
-    ["THICKOUTLINE, MONOCHROME"] = "Thick + Monochrome",
-    [""]                         = "None",
-}
-local OUTLINE_ORDER = {
-    "OUTLINE", "THICKOUTLINE", "MONOCHROME",
-    "OUTLINE, MONOCHROME", "THICKOUTLINE, MONOCHROME", "",
-}
-
-local GLOW_LIST = {
-    proc     = "Proc Glow",
-    pixel    = "Pixel Glow",
-    autocast = "Autocast Glow",
-    button   = "Button Glow",
-}
-local GLOW_ORDER = { "proc", "pixel", "autocast", "button" }
+-- Populated by RebuildLocalizedLists(); declared up front so module-local
+-- references below close over the same variables when they get rebuilt.
+local ANCHOR_LIST, ANCHOR_ORDER
+local VISIBILITY_LIST, VISIBILITY_ORDER
+local OUTLINE_LIST, OUTLINE_ORDER
+local GLOW_LIST, GLOW_ORDER
+local LOCALE_LIST, LOCALE_ORDER
 
 local function BuildFontList()
     local list, order = {}, {}
@@ -151,9 +135,9 @@ end
 -- Page: Main
 ------------------------------------------------------------
 local function BuildPageMain(c)
-    local ug = AddGroup(c, "UI")
+    local ug = AddGroup(c, L["UI"])
     local uiScaleSlider = AceGUI:Create("Slider")
-    uiScaleSlider:SetLabel("UI Scale")
+    uiScaleSlider:SetLabel(L["UI Scale"])
     uiScaleSlider:SetSliderValues(50, 200, 1)
     uiScaleSlider:SetValue(DAT.db.guiScale or 100)
     uiScaleSlider:SetRelativeWidth(0.5)
@@ -172,32 +156,43 @@ local function BuildPageMain(c)
     end)
     ug:AddChild(uiScaleSlider)
 
-    local ig = AddGroup(c, "Icon")
-    AddSlider(ig, "Icon Size", 32, 128, 1,
+    local langDd = AceGUI:Create("Dropdown")
+    langDd:SetLabel(L["Language"])
+    langDd:SetList(LOCALE_LIST, LOCALE_ORDER)
+    langDd:SetValue(DAT.db.locale or "auto")
+    langDd:SetRelativeWidth(0.5)
+    langDd:SetCallback("OnValueChanged", function(_, _, key)
+        DAT.db.locale = key
+        StaticPopup_Show("DOATRACKER_LOCALE_RELOAD")
+    end)
+    ug:AddChild(langDd)
+
+    local ig = AddGroup(c, L["Icon"])
+    AddSlider(ig, L["Icon Size"], 32, 128, 1,
         function() return DAT.db.iconSize or 72 end,
         function(v) DAT.db.iconSize = v; DAT:RebuildUI() end)
-    AddSlider(ig, "Icon Zoom", 0, 30, 1,
+    AddSlider(ig, L["Icon Zoom"], 0, 30, 1,
         function() return DAT.db.iconZoom or 8 end,
         function(v) DAT.db.iconZoom = v; DAT:ApplyIconZoom() end)
-    AddSlider(ig, "Icon Brightness (%)", 0, 100, 1,
+    AddSlider(ig, L["Icon Brightness (%)"], 0, 100, 1,
         function() return DAT.db.iconBrightness or 35 end,
         function(v) DAT.db.iconBrightness = v; DAT:ApplyVisuals() end)
-    AddSlider(ig, "Overlay Alpha (%)", 0, 90, 1,
-        function() return DAT.db.overlayAlpha or 45 end,
-        function(v) DAT.db.overlayAlpha = v; DAT:ApplyVisuals() end)
+    AddSlider(ig, L["Icon Alpha (%)"], 0, 100, 1,
+        function() return DAT.db.iconAlpha or 100 end,
+        function(v) DAT.db.iconAlpha = v; DAT:ApplyVisuals() end)
 
-    local pg = AddGroup(c, "Position")
+    local pg = AddGroup(c, L["Position"])
     local maxX = math.floor(GetScreenWidth()  + 0.5)
     local maxY = math.floor(GetScreenHeight() + 0.5)
-    _posXSlider = AddSlider(pg, "Position X", 0, maxX, 1,
+    _posXSlider = AddSlider(pg, L["Position X"], 0, maxX, 1,
         function() return math.floor((DAT.db.posX or 0) + 0.5) end,
         function(v) DAT.db.posX = v; DAT:ApplyFramePosition() end)
-    _posYSlider = AddSlider(pg, "Position Y", 0, maxY, 1,
+    _posYSlider = AddSlider(pg, L["Position Y"], 0, maxY, 1,
         function() return math.floor((DAT.db.posY or 0) + 0.5) end,
         function(v) DAT.db.posY = v; DAT:ApplyFramePosition() end)
     _posXSlider:SetDisabled(DAT.db.locked and true or false)
     _posYSlider:SetDisabled(DAT.db.locked and true or false)
-    AddCheckbox(pg, "Lock Position",
+    AddCheckbox(pg, L["Lock Position"],
         function() return DAT.db.locked end,
         function(v)
             DAT.db.locked = v
@@ -206,12 +201,12 @@ local function BuildPageMain(c)
             if _posYSlider then _posYSlider:SetDisabled(v and true or false) end
         end, 1)
 
-    local dg = AddGroup(c, "Display")
-    AddDropdown(dg, "Show Tracker", VISIBILITY_LIST, VISIBILITY_ORDER,
+    local dg = AddGroup(c, L["Display"])
+    AddDropdown(dg, L["Show Tracker"], VISIBILITY_LIST, VISIBILITY_ORDER,
         function() return DAT.db.visibilityMode or "always" end,
         function(v) DAT.db.visibilityMode = v; DAT:UpdateVisibility() end)
     local hideGroup = {}
-    AddCheckbox(dg, "Hide When No Buff",
+    AddCheckbox(dg, L["Hide When No Buff"],
         function() return DAT.db.hideWhenNoBuff or false end,
         function(v)
             DAT.db.hideWhenNoBuff = v
@@ -220,7 +215,7 @@ local function BuildPageMain(c)
             for _, w in ipairs(hideGroup) do w:SetDisabled(dis) end
         end,
         0.5)
-    hideGroup[#hideGroup+1] = AddSlider(dg, "Hide Delay (sec)", 0, 30, 1,
+    hideGroup[#hideGroup+1] = AddSlider(dg, L["Hide Delay (sec)"], 0, 30, 1,
         function() return DAT.db.hideDelaySec or 0 end,
         function(v) DAT.db.hideDelaySec = v end,
         0.5)
@@ -228,7 +223,7 @@ local function BuildPageMain(c)
         local dis = not DAT.db.hideWhenNoBuff
         for _, w in ipairs(hideGroup) do w:SetDisabled(dis) end
     end
-    AddSlider(dg, "Count Reset Delay (sec)", 0, 60, 1,
+    AddSlider(dg, L["Count Reset Delay (sec)"], 0, 60, 1,
         function() return DAT.db.countLingerSec or 0 end,
         function(v) DAT.db.countLingerSec = v end,
         0.5)
@@ -238,9 +233,9 @@ end
 -- Page: Fonts
 ------------------------------------------------------------
 local function BuildPageFonts(c)
-    local fg = AddGroup(c, "Font")
+    local fg = AddGroup(c, L["Font"])
     local fontList, fontOrder = BuildFontList()
-    AddDropdown(fg, "Font", fontList, fontOrder,
+    AddDropdown(fg, L["Font"], fontList, fontOrder,
         function() return DAT.db.fontName or "Default" end,
         function(v)
             for _, e in ipairs(DAT.Media:GetAvailableFonts()) do
@@ -254,11 +249,11 @@ local function BuildPageFonts(c)
             end
             DAT:RebuildUI()
         end, 1)
-    AddDropdown(fg, "Outline", OUTLINE_LIST, OUTLINE_ORDER,
+    AddDropdown(fg, L["Outline"], OUTLINE_LIST, OUTLINE_ORDER,
         function() return DAT.db.fontFlags or "OUTLINE" end,
         function(v) DAT.db.fontFlags = v; DAT:RebuildUI() end)
     local shadowGroup = {}
-    AddCheckbox(fg, "Shadow",
+    AddCheckbox(fg, L["Shadow"],
         function() return DAT.db.shadowEnabled or false end,
         function(v)
             DAT.db.shadowEnabled = v
@@ -266,13 +261,13 @@ local function BuildPageFonts(c)
             local dis = not v
             for _, w in ipairs(shadowGroup) do w:SetDisabled(dis) end
         end, 0.5)
-    shadowGroup[#shadowGroup+1] = AddSlider(fg, "Shadow X Offset", -5, 5, 1,
+    shadowGroup[#shadowGroup+1] = AddSlider(fg, L["Shadow X Offset"], -5, 5, 1,
         function() return DAT.db.shadowOffsetX or 1 end,
         function(v) DAT.db.shadowOffsetX = v; DAT:ApplyShadow() end)
-    shadowGroup[#shadowGroup+1] = AddSlider(fg, "Shadow Y Offset", -5, 5, 1,
+    shadowGroup[#shadowGroup+1] = AddSlider(fg, L["Shadow Y Offset"], -5, 5, 1,
         function() return DAT.db.shadowOffsetY or -1 end,
         function(v) DAT.db.shadowOffsetY = v; DAT:ApplyShadow() end)
-    shadowGroup[#shadowGroup+1] = AddColorPicker(fg, "Shadow Color",
+    shadowGroup[#shadowGroup+1] = AddColorPicker(fg, L["Shadow Color"],
         function() return DAT.db.shadowColor or { r=0, g=0, b=0 } end,
         function(r, g, b)
             DAT.db.shadowColor = { r=r, g=g, b=b }
@@ -283,48 +278,48 @@ local function BuildPageFonts(c)
         for _, w in ipairs(shadowGroup) do w:SetDisabled(dis) end
     end
 
-    local cg = AddGroup(c, "Count Text")
-    AddSlider(cg, "Font Size", 8, 60, 1,
+    local cg = AddGroup(c, L["Count Text"])
+    AddSlider(cg, L["Font Size"], 8, 60, 1,
         function() return DAT.db.countFontSize or 28 end,
         function(v) DAT.db.countFontSize = v; DAT:RebuildUI() end)
-    AddDropdown(cg, "Anchor", ANCHOR_LIST, ANCHOR_ORDER,
+    AddDropdown(cg, L["Anchor"], ANCHOR_LIST, ANCHOR_ORDER,
         function() return DAT.db.countAnchor or "CENTER" end,
         function(v) DAT.db.countAnchor = v; DAT:RebuildUI() end)
-    AddSlider(cg, "Offset X", -100, 100, 1,
+    AddSlider(cg, L["Offset X"], -100, 100, 1,
         function() return DAT.db.countOffsetX or 0 end,
         function(v) DAT.db.countOffsetX = v; DAT:RebuildUI() end)
-    AddSlider(cg, "Offset Y", -100, 100, 1,
+    AddSlider(cg, L["Offset Y"], -100, 100, 1,
         function() return DAT.db.countOffsetY or 0 end,
         function(v) DAT.db.countOffsetY = v; DAT:RebuildUI() end)
 
-    local dg = AddGroup(c, "Demon Count Text")
-    AddSlider(dg, "Font Size", 6, 60, 1,
+    local dg = AddGroup(c, L["Demon Count Text"])
+    AddSlider(dg, L["Font Size"], 6, 60, 1,
         function() return DAT.db.demonFontSize or 13 end,
         function(v) DAT.db.demonFontSize = v; DAT:RebuildUI() end)
-    AddDropdown(dg, "Anchor", ANCHOR_LIST, ANCHOR_ORDER,
+    AddDropdown(dg, L["Anchor"], ANCHOR_LIST, ANCHOR_ORDER,
         function() return DAT.db.demonAnchor or "TOP" end,
         function(v) DAT.db.demonAnchor = v; DAT:RebuildUI() end)
-    AddSlider(dg, "Offset X", -100, 100, 1,
+    AddSlider(dg, L["Offset X"], -100, 100, 1,
         function() return DAT.db.demonOffsetX or 0 end,
         function(v) DAT.db.demonOffsetX = v; DAT:RebuildUI() end)
-    AddSlider(dg, "Offset Y", -100, 100, 1,
+    AddSlider(dg, L["Offset Y"], -100, 100, 1,
         function() return DAT.db.demonOffsetY or 0 end,
         function(v) DAT.db.demonOffsetY = v; DAT:RebuildUI() end)
 
-    local tg = AddGroup(c, "Timer Text")
-    AddSlider(tg, "Font Size", 6, 60, 1,
+    local tg = AddGroup(c, L["Timer Text"])
+    AddSlider(tg, L["Font Size"], 6, 60, 1,
         function() return DAT.db.timerFontSize or 13 end,
         function(v) DAT.db.timerFontSize = v; DAT:RebuildUI() end)
-    AddDropdown(tg, "Anchor", ANCHOR_LIST, ANCHOR_ORDER,
+    AddDropdown(tg, L["Anchor"], ANCHOR_LIST, ANCHOR_ORDER,
         function() return DAT.db.timerAnchor or "BOTTOM" end,
         function(v) DAT.db.timerAnchor = v; DAT:RebuildUI() end)
-    AddSlider(tg, "Offset X", -100, 100, 1,
+    AddSlider(tg, L["Offset X"], -100, 100, 1,
         function() return DAT.db.timerOffsetX or 0 end,
         function(v) DAT.db.timerOffsetX = v; DAT:RebuildUI() end)
-    AddSlider(tg, "Offset Y", -100, 100, 1,
+    AddSlider(tg, L["Offset Y"], -100, 100, 1,
         function() return DAT.db.timerOffsetY or 0 end,
         function(v) DAT.db.timerOffsetY = v; DAT:RebuildUI() end)
-    AddCheckbox(tg, "Show \"s\" Suffix",
+    AddCheckbox(tg, L["Show \"s\" Suffix"],
         function() return DAT.db.timerShowSuffix ~= false end,
         function(v) DAT.db.timerShowSuffix = v end, 1)
 end
@@ -333,9 +328,9 @@ end
 -- Page: Border
 ------------------------------------------------------------
 local function BuildPageBorder(c)
-    local g = AddGroup(c, "Border Style")
+    local g = AddGroup(c, L["Border Style"])
     local bList, bOrder = BuildBorderList()
-    AddDropdown(g, "Border", bList, bOrder,
+    AddDropdown(g, L["Border"], bList, bOrder,
         function() return DAT.db.borderName or "None" end,
         function(v)
             for _, e in ipairs(DAT.Media:GetAvailableBorders()) do
@@ -347,21 +342,21 @@ local function BuildPageBorder(c)
                 end
             end
         end, 1)
-    AddSlider(g, "Border Size (px)", 1, 32, 1,
+    AddSlider(g, L["Border Size (px)"], 1, 32, 1,
         function() return DAT.db.borderSize or 12 end,
         function(v) DAT.db.borderSize = v; DAT:ApplyBorder() end)
-    AddSlider(g, "Border Offset (px)", -16, 32, 1,
+    AddSlider(g, L["Border Offset (px)"], -16, 32, 1,
         function() return DAT.db.borderOffset or 0 end,
         function(v) DAT.db.borderOffset = v; DAT:ApplyBorder() end)
 
-    local cg = AddGroup(c, "Border Colors")
-    AddColorPicker(cg, "Active Border",
+    local cg = AddGroup(c, L["Border Colors"])
+    AddColorPicker(cg, L["Active Border"],
         function() return DAT.db.borderColor or { r=0.1, g=0.9, b=0.1 } end,
         function(r, g, b)
             DAT.db.borderColor = { r=r, g=g, b=b }
             DAT:ApplyBorderColor()
         end)
-    AddColorPicker(cg, "Inactive Border",
+    AddColorPicker(cg, L["Inactive Border"],
         function() return DAT.db.inactBorderColor or { r=0.15, g=0.15, b=0.15 } end,
         function(r, g, b)
             DAT.db.inactBorderColor = { r=r, g=g, b=b }
@@ -373,54 +368,54 @@ end
 -- Page: Colors
 ------------------------------------------------------------
 local function BuildPageColors(c)
-    local g = AddGroup(c, "Count Colors")
-    AddColorPicker(g, "Active Count",
+    local g = AddGroup(c, L["Count Colors"])
+    AddColorPicker(g, L["Active Count"],
         function() return DAT.db.activeCountColor or { r=0.15, g=1.0, b=0.15 } end,
         function(r, g, b)
             DAT.db.activeCountColor = { r=r, g=g, b=b }
             DAT:ApplyVisuals()
         end)
-    AddColorPicker(g, "Inactive Count",
+    AddColorPicker(g, L["Inactive Count"],
         function() return DAT.db.inactCountColor or { r=0.55, g=0.55, b=0.55 } end,
         function(r, g, b)
             DAT.db.inactCountColor = { r=r, g=g, b=b }
             DAT:ApplyVisuals()
         end)
 
-    local dg = AddGroup(c, "Demon Count Colors")
-    AddColorPicker(dg, "Active Demon Count",
+    local dg = AddGroup(c, L["Demon Count Colors"])
+    AddColorPicker(dg, L["Active Demon Count"],
         function() return DAT.db.activeDemonColor or { r=1.0, g=0.84, b=0.0 } end,
         function(r, g, b)
             DAT.db.activeDemonColor = { r=r, g=g, b=b }
             DAT:ApplyVisuals()
         end)
-    AddColorPicker(dg, "Inactive Demon Count",
+    AddColorPicker(dg, L["Inactive Demon Count"],
         function() return DAT.db.inactDemonColor or { r=0.55, g=0.55, b=0.55 } end,
         function(r, g, b)
             DAT.db.inactDemonColor = { r=r, g=g, b=b }
             DAT:ApplyVisuals()
         end)
 
-    local tg = AddGroup(c, "Timer Colors")
-    AddColorPicker(tg, "Timer",
+    local tg = AddGroup(c, L["Timer Colors"])
+    AddColorPicker(tg, L["Timer"],
         function() return DAT.db.timerColor or { r=1.0, g=0.82, b=0.0 } end,
         function(r, g, b)
             DAT.db.timerColor = { r=r, g=g, b=b }
             DAT:ApplyVisuals()
         end)
     local warnGroup = {}
-    AddCheckbox(tg, "Enable Timer Warning Color",
+    AddCheckbox(tg, L["Enable Timer Warning Color"],
         function() return DAT.db.timerWarnEnabled ~= false end,
         function(v)
             DAT.db.timerWarnEnabled = v
             local dis = not v
             for _, w in ipairs(warnGroup) do w:SetDisabled(dis) end
         end, 1,
-        "Change the timer text color when time is running low.")
-    warnGroup[#warnGroup+1] = AddSlider(tg, "Warn When <= (sec)", 1, 20, 1,
+        L["Change the timer text color when time is running low."])
+    warnGroup[#warnGroup+1] = AddSlider(tg, L["Warn When <= (sec)"], 1, 20, 1,
         function() return DAT.db.timerWarnThreshold or 5 end,
         function(v) DAT.db.timerWarnThreshold = v end)
-    warnGroup[#warnGroup+1] = AddColorPicker(tg, "Timer Warning",
+    warnGroup[#warnGroup+1] = AddColorPicker(tg, L["Timer Warning"],
         function() return DAT.db.timerWarnColor or { r=1.0, g=0.2, b=0.2 } end,
         function(r, g, b)
             DAT.db.timerWarnColor = { r=r, g=g, b=b }
@@ -435,9 +430,9 @@ end
 -- Page: Glow
 ------------------------------------------------------------
 local function BuildPageGlow(c)
-    local g = AddGroup(c, "Glow")
+    local g = AddGroup(c, L["Glow"])
     local glowGroup = {}
-    AddCheckbox(g, "Enable Glow",
+    AddCheckbox(g, L["Enable Glow"],
         function() return DAT.db.glowEnabled or false end,
         function(v)
             DAT.db.glowEnabled = v
@@ -445,7 +440,7 @@ local function BuildPageGlow(c)
             local dis = not v
             for _, w in ipairs(glowGroup) do w:SetDisabled(dis) end
         end, 1)
-    glowGroup[#glowGroup+1] = AddDropdown(g, "Glow Type", GLOW_LIST, GLOW_ORDER,
+    glowGroup[#glowGroup+1] = AddDropdown(g, L["Glow Type"], GLOW_LIST, GLOW_ORDER,
         function() return DAT.db.glowType or "proc" end,
         function(v)
             local prev = DAT.db.glowType
@@ -455,7 +450,7 @@ local function BuildPageGlow(c)
                 RefreshPage("glow")
             end
         end)
-    glowGroup[#glowGroup+1] = AddColorPicker(g, "Glow Color",
+    glowGroup[#glowGroup+1] = AddColorPicker(g, L["Glow Color"],
         function() return DAT.db.glowColor or { r=1.0, g=0.84, b=0.0 } end,
         function(r, g, b)
             DAT.db.glowColor = { r=r, g=g, b=b }
@@ -463,23 +458,23 @@ local function BuildPageGlow(c)
         end)
 
     if DAT.db.glowType == "pixel" then
-        local pg = AddGroup(c, "Pixel Glow Options")
-        glowGroup[#glowGroup+1] = AddSlider(pg, "Lines", 1, 20, 1,
+        local pg = AddGroup(c, L["Pixel Glow Options"])
+        glowGroup[#glowGroup+1] = AddSlider(pg, L["Lines"], 1, 20, 1,
             function() return DAT.db.glowPixelN or 8 end,
             function(v) DAT.db.glowPixelN = v; DAT:ApplyGlow(DAT._dominionActive) end)
-        glowGroup[#glowGroup+1] = AddSlider(pg, "Frequency", 0.01, 2, 0.01,
+        glowGroup[#glowGroup+1] = AddSlider(pg, L["Frequency"], 0.01, 2, 0.01,
             function() return DAT.db.glowPixelFreq or 0.25 end,
             function(v) DAT.db.glowPixelFreq = v; DAT:ApplyGlow(DAT._dominionActive) end)
-        glowGroup[#glowGroup+1] = AddSlider(pg, "Length (0=auto)", 0, 20, 1,
+        glowGroup[#glowGroup+1] = AddSlider(pg, L["Length (0=auto)"], 0, 20, 1,
             function() return DAT.db.glowPixelLength or 3 end,
             function(v) DAT.db.glowPixelLength = v; DAT:ApplyGlow(DAT._dominionActive) end)
-        glowGroup[#glowGroup+1] = AddSlider(pg, "Thickness", 1, 10, 1,
+        glowGroup[#glowGroup+1] = AddSlider(pg, L["Thickness"], 1, 10, 1,
             function() return DAT.db.glowPixelThick or 2 end,
             function(v) DAT.db.glowPixelThick = v; DAT:ApplyGlow(DAT._dominionActive) end)
-        glowGroup[#glowGroup+1] = AddSlider(pg, "X Offset", -20, 20, 1,
+        glowGroup[#glowGroup+1] = AddSlider(pg, L["X Offset"], -20, 20, 1,
             function() return DAT.db.glowPixelXOffset or 0 end,
             function(v) DAT.db.glowPixelXOffset = v; DAT:ApplyGlow(DAT._dominionActive) end)
-        glowGroup[#glowGroup+1] = AddSlider(pg, "Y Offset", -20, 20, 1,
+        glowGroup[#glowGroup+1] = AddSlider(pg, L["Y Offset"], -20, 20, 1,
             function() return DAT.db.glowPixelYOffset or 0 end,
             function(v) DAT.db.glowPixelYOffset = v; DAT:ApplyGlow(DAT._dominionActive) end)
     end
@@ -493,41 +488,9 @@ end
 ------------------------------------------------------------
 -- Announce Rules Editor
 ------------------------------------------------------------
-local RULE_CONDITIONS = {
-    { key = "dominion", label = "Dominion" },
-    { key = "hog",      label = "HoG Count" },
-    { key = "demon",    label = "Demons" },
-}
-
-local DOMINION_OPERATORS = {
-    { key = "start", label = "Start" },
-    { key = "end",   label = "End" },
-}
-
-local COUNT_OPERATORS = {
-    { key = ">",  label = ">" },
-    { key = ">=", label = ">=" },
-    { key = "<",  label = "<" },
-    { key = "<=", label = "<=" },
-    { key = "=",  label = "=" },
-}
-
-local COUNT_CONDITIONS = {
-    { key = "hog",   label = "HoG Count" },
-    { key = "demon", label = "Demons" },
-}
-
-local LOGIC_OPERATORS = {
-    { key = "and", label = "AND" },
-    { key = "or",  label = "OR" },
-}
-
-local RULE_CHANNELS = {
-    { key = "SYSTEM", label = "System" },
-    { key = "PARTY",  label = "Party" },
-    { key = "SAY",    label = "Say" },
-    { key = "YELL",   label = "Yell" },
-}
+-- Populated by RebuildLocalizedLists()
+local RULE_CONDITIONS, DOMINION_OPERATORS, COUNT_OPERATORS
+local COUNT_CONDITIONS, LOGIC_OPERATORS, RULE_CHANNELS
 
 local function ConditionNeedsThreshold(cond)
     return cond ~= "dominion"
@@ -562,12 +525,100 @@ local function ListFromArray(arr)
     return list, order
 end
 
-local LOGIC_LIST,    LOGIC_ORDER    = ListFromArray(LOGIC_OPERATORS)
-local CHANNEL_LIST,  CHANNEL_ORDER  = ListFromArray(RULE_CHANNELS)
-local RULE_COND_LIST_FIRST, RULE_COND_ORDER_FIRST = ListFromArray(RULE_CONDITIONS)
-local RULE_COND_LIST_EXTRA, RULE_COND_ORDER_EXTRA = ListFromArray(COUNT_CONDITIONS)
-local DOMINION_OP_LIST, DOMINION_OP_ORDER = ListFromArray(DOMINION_OPERATORS)
-local COUNT_OP_LIST,    COUNT_OP_ORDER    = ListFromArray(COUNT_OPERATORS)
+local LOGIC_LIST,    LOGIC_ORDER
+local CHANNEL_LIST,  CHANNEL_ORDER
+local RULE_COND_LIST_FIRST, RULE_COND_ORDER_FIRST
+local RULE_COND_LIST_EXTRA, RULE_COND_ORDER_EXTRA
+local DOMINION_OP_LIST, DOMINION_OP_ORDER
+local COUNT_OP_LIST,    COUNT_OP_ORDER
+
+local function RebuildLocalizedLists()
+    ANCHOR_LIST = {
+        CENTER = L["Center"], TOP = L["Top"], BOTTOM = L["Bottom"],
+        LEFT = L["Left"], RIGHT = L["Right"],
+    }
+    ANCHOR_ORDER = { "CENTER", "TOP", "BOTTOM", "LEFT", "RIGHT" }
+
+    VISIBILITY_LIST = {
+        always   = L["Always"],
+        combat   = L["In Combat Only"],
+        nocombat = L["Out of Combat Only"],
+        never    = L["Never"],
+    }
+    VISIBILITY_ORDER = { "always", "combat", "nocombat", "never" }
+
+    OUTLINE_LIST = {
+        ["OUTLINE"]                  = L["Outline"],
+        ["THICKOUTLINE"]             = L["Thick Outline"],
+        ["MONOCHROME"]               = L["Monochrome"],
+        ["OUTLINE, MONOCHROME"]      = L["Outline + Monochrome"],
+        ["THICKOUTLINE, MONOCHROME"] = L["Thick + Monochrome"],
+        [""]                         = L["None"],
+    }
+    OUTLINE_ORDER = {
+        "OUTLINE", "THICKOUTLINE", "MONOCHROME",
+        "OUTLINE, MONOCHROME", "THICKOUTLINE, MONOCHROME", "",
+    }
+
+    GLOW_LIST = {
+        proc = L["Proc Glow"], pixel = L["Pixel Glow"],
+        autocast = L["Autocast Glow"], button = L["Button Glow"],
+    }
+    GLOW_ORDER = { "proc", "pixel", "autocast", "button" }
+
+    LOCALE_LIST, LOCALE_ORDER = {}, {}
+    for _, ch in ipairs(DAT.LOCALE_CHOICES or {}) do
+        LOCALE_LIST[ch.key] = (ch.key == "auto") and L["Auto (Client)"] or ch.label
+        LOCALE_ORDER[#LOCALE_ORDER + 1] = ch.key
+    end
+
+    RULE_CONDITIONS = {
+        { key = "dominion", label = L["Dominion"] },
+        { key = "hog",      label = L["HoG Count"] },
+        { key = "demon",    label = L["Demons"] },
+    }
+    DOMINION_OPERATORS = {
+        { key = "start", label = L["Start"] },
+        { key = "end",   label = L["End"] },
+    }
+    COUNT_OPERATORS = {
+        { key = ">",  label = ">" },  { key = ">=", label = ">=" },
+        { key = "<",  label = "<" },  { key = "<=", label = "<=" },
+        { key = "=",  label = "=" },
+    }
+    COUNT_CONDITIONS = {
+        { key = "hog",   label = L["HoG Count"] },
+        { key = "demon", label = L["Demons"] },
+    }
+    LOGIC_OPERATORS = {
+        { key = "and", label = L["AND"] },
+        { key = "or",  label = L["OR"] },
+    }
+    RULE_CHANNELS = {
+        { key = "SYSTEM", label = L["System"] },
+        { key = "PARTY",  label = L["Party"] },
+        { key = "SAY",    label = L["Say"] },
+        { key = "YELL",   label = L["Yell"] },
+    }
+
+    local popup = StaticPopupDialogs["DOATRACKER_LOCALE_RELOAD"]
+    popup.text    = L["Language change requires reloading the UI. Reload now?"]
+    popup.button1 = L["Reload"]
+    popup.button2 = L["Later"]
+
+    LOGIC_LIST,   LOGIC_ORDER   = ListFromArray(LOGIC_OPERATORS)
+    CHANNEL_LIST, CHANNEL_ORDER = ListFromArray(RULE_CHANNELS)
+    RULE_COND_LIST_FIRST, RULE_COND_ORDER_FIRST = ListFromArray(RULE_CONDITIONS)
+    RULE_COND_LIST_EXTRA, RULE_COND_ORDER_EXTRA = ListFromArray(COUNT_CONDITIONS)
+    DOMINION_OP_LIST, DOMINION_OP_ORDER = ListFromArray(DOMINION_OPERATORS)
+    COUNT_OP_LIST,    COUNT_OP_ORDER    = ListFromArray(COUNT_OPERATORS)
+end
+
+-- Initial build with whatever L has right now (likely fallback keys, since
+-- SavedVariables aren't restored until ADDON_LOADED). LoadLocale fires the
+-- hook again after the locale table is applied inside Initialize().
+RebuildLocalizedLists()
+if DAT.RegisterLocaleHook then DAT.RegisterLocaleHook(RebuildLocalizedLists) end
 
 local function OperatorListForCondition(cond)
     if cond == "dominion" then
@@ -590,7 +641,7 @@ local function BuildConditionRow(parent, ruleIdx, condIdx, cond, isFirst, collec
     -- Logic / "If" prefix
     if isFirst then
         local lbl = AceGUI:Create("Label")
-        lbl:SetText("  |cffffd700If|r")
+        lbl:SetText("  |cffffd700" .. L["If"] .. "|r")
         lbl:SetFontObject(GameFontHighlight)
         lbl:SetRelativeWidth(0.12)
         row:AddChild(lbl)
@@ -688,7 +739,7 @@ end
 ------------------------------------------------------------
 local function BuildRuleCard(parent, ruleIdx, rule)
     local card = AceGUI:Create("InlineGroup")
-    card:SetTitle("Announcement " .. ruleIdx)
+    card:SetTitle(L["Announcement"] .. " " .. ruleIdx)
     card:SetLayout("List")
     card:SetFullWidth(true)
     parent:AddChild(card)
@@ -708,7 +759,7 @@ local function BuildRuleCard(parent, ruleIdx, rule)
     card:AddChild(header)
 
     local cb = AceGUI:Create("CheckBox")
-    cb:SetLabel("Enabled")
+    cb:SetLabel(L["Enabled"])
     cb:SetValue(rule.enabled and true or false)
     cb:SetRelativeWidth(0.3)
     cb:SetCallback("OnValueChanged", function(_, _, v)
@@ -728,7 +779,7 @@ local function BuildRuleCard(parent, ruleIdx, rule)
     ruleGroup[#ruleGroup+1] = chanDd
 
     local delRule = AceGUI:Create("Button")
-    delRule:SetText("Delete")
+    delRule:SetText(L["Delete"])
     delRule:SetRelativeWidth(0.3)
     delRule:SetHeight(24)
     delRule:SetCallback("OnClick", function()
@@ -752,7 +803,7 @@ local function BuildRuleCard(parent, ruleIdx, rule)
         card:AddChild(spacer)
 
         local addCondBtn = AceGUI:Create("Button")
-        addCondBtn:SetText("+ Add Condition")
+        addCondBtn:SetText(L["+ Add Condition"])
         addCondBtn:SetRelativeWidth(0.5)
         addCondBtn:SetCallback("OnClick", function()
             table.insert(rule.conditions, {
@@ -766,7 +817,7 @@ local function BuildRuleCard(parent, ruleIdx, rule)
 
     -- Message editbox (full width)
     local msgEb = AceGUI:Create("EditBox")
-    msgEb:SetLabel("Message")
+    msgEb:SetLabel(L["Message"])
     msgEb:SetText(rule.msg or "")
     msgEb:SetFullWidth(true)
     msgEb:SetCallback("OnEnterPressed", function(_, _, text) rule.msg = text end)
@@ -785,10 +836,10 @@ end
 -- Page: Announce
 ------------------------------------------------------------
 local function BuildPageAnnounce(c)
-    local intro = AddGroup(c, "Announcement")
+    local intro = AddGroup(c, L["Announcement"])
 
     local hint = AceGUI:Create("Label")
-    hint:SetText("Tags:\n- |cffffd700{count:hog}|r: Hand of Gul'dan casts\n- |cffffd700{count:demon}|r: Demons summoned")
+    hint:SetText(L["Tags:\n- |cffffd700{count:hog}|r: Hand of Gul'dan casts\n- |cffffd700{count:demon}|r: Demons summoned"])
     hint:SetFullWidth(true)
     hint:SetFontObject(GameFontHighlight)
     intro:AddChild(hint)
@@ -800,7 +851,7 @@ local function BuildPageAnnounce(c)
     intro:AddChild(gap)
 
     local note = AceGUI:Create("Label")
-    note:SetText("|cffaaaaaaNote: Say and Yell only work inside instances.|r")
+    note:SetText(L["|cffaaaaaaNote: Say and Yell only work inside instances.|r"])
     note:SetFullWidth(true)
     note:SetFontObject(GameFontHighlight)
     intro:AddChild(note)
@@ -812,7 +863,7 @@ local function BuildPageAnnounce(c)
     intro:AddChild(gap2)
 
     local addBtn = AceGUI:Create("Button")
-    addBtn:SetText("+ Add Announcement")
+    addBtn:SetText(L["+ Add Announcement"])
     addBtn:SetRelativeWidth(0.5)
     addBtn:SetCallback("OnClick", function()
         local rules = DAT.db.announceRules
@@ -830,7 +881,7 @@ local function BuildPageAnnounce(c)
     local rules = DAT.db.announceRules or {}
     if #rules == 0 then
         local empty = AceGUI:Create("Label")
-        empty:SetText("|cff888888No rules configured. Click '+ Add Announcement' above.|r")
+        empty:SetText(L["|cff888888No rules configured. Click '+ Add Announcement' above.|r"])
         empty:SetFullWidth(true)
         c:AddChild(empty)
     else
@@ -843,13 +894,15 @@ end
 ------------------------------------------------------------
 -- Main config window (AceGUI Frame + TreeGroup)
 ------------------------------------------------------------
+-- textKey is resolved through L at BuildTree time so the tree picks up the
+-- active locale after LoadLocale runs inside Initialize.
 local PAGES = {
-    { value = "main",     text = "Main",     build = BuildPageMain     },
-    { value = "fonts",    text = "Fonts",    build = BuildPageFonts    },
-    { value = "border",   text = "Border",   build = BuildPageBorder   },
-    { value = "colors",   text = "Colors",   build = BuildPageColors   },
-    { value = "glow",     text = "Glow",     build = BuildPageGlow     },
-    { value = "announce", text = "Announcement", build = BuildPageAnnounce },
+    { value = "main",     textKey = "Main",         build = BuildPageMain     },
+    { value = "fonts",    textKey = "Fonts",        build = BuildPageFonts    },
+    { value = "border",   textKey = "Border",       build = BuildPageBorder   },
+    { value = "colors",   textKey = "Colors",       build = BuildPageColors   },
+    { value = "glow",     textKey = "Glow",         build = BuildPageGlow     },
+    { value = "announce", textKey = "Announcement", build = BuildPageAnnounce },
 }
 
 local _configStatus = {}
@@ -858,7 +911,7 @@ local _scrollStatus = {}
 local function BuildTree()
     local t = {}
     for _, p in ipairs(PAGES) do
-        t[#t + 1] = { value = p.value, text = p.text }
+        t[#t + 1] = { value = p.value, text = L[p.textKey] }
     end
     return t
 end
@@ -892,7 +945,7 @@ end
 
 function DAT.Config:Open()
     if not AceGUI then
-        print("|cff9482c9[DoA Tracker]|r AceGUI-3.0 is not available.")
+        print(L["|cff9482c9[DoA Tracker]|r AceGUI-3.0 is not available."])
         return
     end
     if _configFrame then
